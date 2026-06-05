@@ -1,17 +1,25 @@
 <script setup lang="ts">
-// Placeholder until M3 (git status / diff / commit)
+const ui = useUiStore()
+const git = useGitStore()
+const workspaces = useWorkspacesStore()
+
+// Refresh statuses whenever the user switches into this view
+watch(() => ui.view, async (view) => {
+  if (view !== 'changes') return
+  const repoPaths = workspaces.repos.map(r => r.path)
+  if (!git.selectedRepo && repoPaths.length) {
+    await git.selectRepo(repoPaths[0]!)
+  } else if (git.selectedRepo) {
+    await git.refresh(git.selectedRepo)
+  }
+  git.refreshAll(repoPaths)
+})
 </script>
 
 <template>
-  <div class="flex h-full items-center justify-center">
-    <div class="flex flex-col items-center gap-3 px-10 py-12 rounded-xl border border-default bg-muted">
-      <UIcon name="i-lucide-git-branch" class="size-8 text-dimmed" />
-      <h2 class="text-base font-medium text-highlighted">
-        File Changes
-      </h2>
-      <p class="text-sm text-muted">
-        Pick a file from the left sidebar to see its diff here.
-      </p>
-    </div>
+  <div class="flex h-full min-h-0">
+    <GitRepoSidebar />
+    <GitDiffViewer />
+    <GitCommitPanel />
   </div>
 </template>

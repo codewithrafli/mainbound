@@ -2,6 +2,12 @@ export interface TerminalSession {
   id: string
   cwd: string | null
   title: string
+  branch: string | null
+}
+
+function basename(path: string | null): string | null {
+  if (!path) return null
+  return path.split('/').filter(Boolean).pop() ?? null
 }
 
 export const useTerminalsStore = defineStore('terminals', () => {
@@ -17,14 +23,26 @@ export const useTerminalsStore = defineStore('terminals', () => {
    * spawned by TerminalPane on mount, after its event listeners are
    * attached (avoids losing the first prompt bytes).
    */
-  function create(cwd: string | null = null): TerminalSession {
+  function create(cwd: string | null = null, title?: string): TerminalSession {
     const session: TerminalSession = {
       id: crypto.randomUUID(),
       cwd,
-      title: 'zsh'
+      title: title ?? basename(cwd) ?? 'zsh',
+      branch: null
     }
     sessions.value.push(session)
     activeId.value = session.id
+    // Resolve the git branch for the sidebar (async, best-effort)
+    if (cwd) {
+      const reactiveSession = sessions.value[sessions.value.length - 1]!
+      import('@tauri-apps/api/core').then(({ invoke }) =>
+        invoke<string | null>('git_branch', { path: cwd })
+          .then((branch) => {
+            reactiveSession.branch = branch
+          })
+          .catch(() => {})
+      )
+    }
     return session
   }
 

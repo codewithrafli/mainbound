@@ -8,6 +8,8 @@ pub enum AppError {
     Pty(String),
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+    #[error("serialization error: {0}")]
+    Json(#[from] serde_json::Error),
 }
 
 // Tauri commands need a serializable error type for the webview side.

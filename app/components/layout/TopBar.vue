@@ -14,16 +14,9 @@ const viewTabs: TabsItem[] = [
     data-tauri-drag-region
     class="relative flex items-center h-11 shrink-0 px-3 border-b border-default bg-muted"
   >
-    <!-- left: workspace switcher (placeholder until M2), offset for macOS traffic lights -->
+    <!-- left: workspace switcher, offset for macOS traffic lights -->
     <div class="flex items-center gap-2 pl-[72px]">
-      <UButton
-        label="tide"
-        trailing-icon="i-lucide-chevron-down"
-        color="neutral"
-        variant="outline"
-        size="xs"
-        class="rounded-full px-3"
-      />
+      <LayoutWorkspaceSwitcher />
     </div>
 
     <!-- center: view toggle -->

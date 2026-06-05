@@ -36,8 +36,10 @@ export default defineNuxtConfig({
     envPrefix: ['VITE_', 'TAURI_'],
     optimizeDeps: {
       include: [
+        '@git-diff-view/vue',
         '@tauri-apps/api/core',
         '@tauri-apps/api/event',
+        '@tauri-apps/plugin-dialog',
         '@xterm/xterm',
         '@xterm/addon-fit',
         '@xterm/addon-webgl'

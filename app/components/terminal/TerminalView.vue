@@ -1,9 +1,13 @@
 <script setup lang="ts">
 const terminals = useTerminalsStore()
+const workspaces = useWorkspacesStore()
 
-// Open a first session on launch
-onMounted(() => {
-  if (!terminals.sessions.length) terminals.create()
+// Restore workspaces, then open a first session in the active one
+onMounted(async () => {
+  await workspaces.init()
+  if (!terminals.sessions.length) {
+    terminals.create(workspaces.active?.path ?? null, workspaces.active?.name)
+  }
 })
 
 function onExited(id: string) {
