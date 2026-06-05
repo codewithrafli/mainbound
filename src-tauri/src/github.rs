@@ -294,6 +294,27 @@ pub async fn gh_device_poll(
     Ok(PollResult { status: status.into(), user: None })
 }
 
+async fn api_put(token: &str, path: &str, payload: serde_json::Value) -> AppResult<serde_json::Value> {
+    let resp = http()
+        .put(format!("{API}{path}"))
+        .bearer_auth(token)
+        .header("Accept", "application/vnd.github+json")
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| AppError::Pty(format!("github: {e}")))?;
+    let status = resp.status();
+    let body: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| AppError::Pty(format!("github: {e}")))?;
+    if !status.is_success() {
+        let msg = body["message"].as_str().unwrap_or("request failed");
+        return Err(AppError::Pty(format!("github ({status}): {msg}")));
+    }
+    Ok(body)
+}
+
 // ---------------------------------------------------------------------------
 // Remote info + push/pull (git CLI — uses the user's credential helper)
 // ---------------------------------------------------------------------------
@@ -491,6 +512,201 @@ pub async fn gh_create_pr(
     )
     .await?;
     Ok(parse_pr(&pr))
+}
+
+// ---------------------------------------------------------------------------
+// PR detail — full conversation + checks, so the user never needs the
+// GitHub website to follow a PR.
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize, Clone)]
+pub struct PrComment {
+    pub author: String,
+    pub avatar_url: Option<String>,
+    pub body: String,
+    pub created_at: String,
+    /// file path for inline review comments
+    pub path: Option<String>,
+    pub line: Option<u64>,
+    /// "comment" | "review:APPROVED" | "review:CHANGES_REQUESTED" | "review:COMMENTED" | "inline"
+    pub kind: String,
+}
+
+#[derive(Serialize, Clone)]
+pub struct CheckRun {
+    pub name: String,
+    pub status: String,
+    pub conclusion: Option<String>,
+    pub url: Option<String>,
+}
+
+#[derive(Serialize, Clone)]
+pub struct PrDetail {
+    pub number: u64,
+    pub title: String,
+    pub body: String,
+    pub state: String,
+    pub merged: bool,
+    pub mergeable: Option<bool>,
+    pub draft: bool,
+    pub head_ref: String,
+    pub base_ref: String,
+    pub head_sha: String,
+    pub author: String,
+    pub author_avatar: Option<String>,
+    pub html_url: String,
+    pub additions: u64,
+    pub deletions: u64,
+    pub commits: u64,
+    pub changed_files: u64,
+    pub comments: Vec<PrComment>,
+    pub checks: Vec<CheckRun>,
+}
+
+#[tauri::command]
+pub async fn gh_pr_detail(
+    state: State<'_, AppState>,
+    owner: String,
+    name: String,
+    number: u64,
+) -> Result<PrDetail, AppError> {
+    let token = require_token(&state)?;
+    let base = format!("/repos/{owner}/{name}");
+
+    let pr = api_get(&token, &format!("{base}/pulls/{number}")).await?;
+    let issue_comments = api_get(&token, &format!("{base}/issues/{number}/comments?per_page=100"))
+        .await
+        .unwrap_or_default();
+    let reviews = api_get(&token, &format!("{base}/pulls/{number}/reviews?per_page=100"))
+        .await
+        .unwrap_or_default();
+    let inline = api_get(&token, &format!("{base}/pulls/{number}/comments?per_page=100"))
+        .await
+        .unwrap_or_default();
+    let sha = pr["head"]["sha"].as_str().unwrap_or_default().to_string();
+    let check_runs = api_get(&token, &format!("{base}/commits/{sha}/check-runs?per_page=100"))
+        .await
+        .unwrap_or_default();
+
+    let mut comments: Vec<PrComment> = Vec::new();
+    if let Some(list) = issue_comments.as_array() {
+        for c in list {
+            comments.push(PrComment {
+                author: c["user"]["login"].as_str().unwrap_or_default().to_string(),
+                avatar_url: c["user"]["avatar_url"].as_str().map(String::from),
+                body: c["body"].as_str().unwrap_or_default().to_string(),
+                created_at: c["created_at"].as_str().unwrap_or_default().to_string(),
+                path: None,
+                line: None,
+                kind: "comment".into(),
+            });
+        }
+    }
+    if let Some(list) = reviews.as_array() {
+        for r in list {
+            let review_state = r["state"].as_str().unwrap_or_default();
+            let body = r["body"].as_str().unwrap_or_default();
+            // skip empty COMMENTED shells (their substance is in inline comments)
+            if body.is_empty() && review_state == "COMMENTED" {
+                continue;
+            }
+            comments.push(PrComment {
+                author: r["user"]["login"].as_str().unwrap_or_default().to_string(),
+                avatar_url: r["user"]["avatar_url"].as_str().map(String::from),
+                body: body.to_string(),
+                created_at: r["submitted_at"].as_str().unwrap_or_default().to_string(),
+                path: None,
+                line: None,
+                kind: format!("review:{review_state}"),
+            });
+        }
+    }
+    if let Some(list) = inline.as_array() {
+        for c in list {
+            comments.push(PrComment {
+                author: c["user"]["login"].as_str().unwrap_or_default().to_string(),
+                avatar_url: c["user"]["avatar_url"].as_str().map(String::from),
+                body: c["body"].as_str().unwrap_or_default().to_string(),
+                created_at: c["created_at"].as_str().unwrap_or_default().to_string(),
+                path: c["path"].as_str().map(String::from),
+                line: c["line"].as_u64().or_else(|| c["original_line"].as_u64()),
+                kind: "inline".into(),
+            });
+        }
+    }
+    comments.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+
+    let mut checks: Vec<CheckRun> = Vec::new();
+    if let Some(runs) = check_runs["check_runs"].as_array() {
+        for run in runs {
+            checks.push(CheckRun {
+                name: run["name"].as_str().unwrap_or_default().to_string(),
+                status: run["status"].as_str().unwrap_or_default().to_string(),
+                conclusion: run["conclusion"].as_str().map(String::from),
+                url: run["html_url"].as_str().map(String::from),
+            });
+        }
+    }
+
+    Ok(PrDetail {
+        number,
+        title: pr["title"].as_str().unwrap_or_default().to_string(),
+        body: pr["body"].as_str().unwrap_or_default().to_string(),
+        state: pr["state"].as_str().unwrap_or_default().to_string(),
+        merged: pr["merged"].as_bool().unwrap_or(false),
+        mergeable: pr["mergeable"].as_bool(),
+        draft: pr["draft"].as_bool().unwrap_or(false),
+        head_ref: pr["head"]["ref"].as_str().unwrap_or_default().to_string(),
+        base_ref: pr["base"]["ref"].as_str().unwrap_or_default().to_string(),
+        head_sha: sha,
+        author: pr["user"]["login"].as_str().unwrap_or_default().to_string(),
+        author_avatar: pr["user"]["avatar_url"].as_str().map(String::from),
+        html_url: pr["html_url"].as_str().unwrap_or_default().to_string(),
+        additions: pr["additions"].as_u64().unwrap_or(0),
+        deletions: pr["deletions"].as_u64().unwrap_or(0),
+        commits: pr["commits"].as_u64().unwrap_or(0),
+        changed_files: pr["changed_files"].as_u64().unwrap_or(0),
+        comments,
+        checks,
+    })
+}
+
+#[tauri::command]
+pub async fn gh_pr_comment(
+    state: State<'_, AppState>,
+    owner: String,
+    name: String,
+    number: u64,
+    body: String,
+) -> Result<(), AppError> {
+    let token = require_token(&state)?;
+    api_post(
+        &token,
+        &format!("/repos/{owner}/{name}/issues/{number}/comments"),
+        json!({ "body": body }),
+    )
+    .await
+    .map(|_| ())
+}
+
+/// `method`: "merge" | "squash" | "rebase". Destructive-ish — the UI
+/// confirms explicitly before calling this.
+#[tauri::command]
+pub async fn gh_pr_merge(
+    state: State<'_, AppState>,
+    owner: String,
+    name: String,
+    number: u64,
+    method: String,
+) -> Result<(), AppError> {
+    let token = require_token(&state)?;
+    api_put(
+        &token,
+        &format!("/repos/{owner}/{name}/pulls/{number}/merge"),
+        json!({ "merge_method": method }),
+    )
+    .await
+    .map(|_| ())
 }
 
 #[derive(Serialize, Clone)]

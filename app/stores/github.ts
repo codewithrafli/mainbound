@@ -37,6 +37,45 @@ export interface GhStatusResponse {
   active: string | null
 }
 
+export interface PrComment {
+  author: string
+  avatar_url: string | null
+  body: string
+  created_at: string
+  path: string | null
+  line: number | null
+  kind: string
+}
+
+export interface CheckRun {
+  name: string
+  status: string
+  conclusion: string | null
+  url: string | null
+}
+
+export interface PrDetail {
+  number: number
+  title: string
+  body: string
+  state: string
+  merged: boolean
+  mergeable: boolean | null
+  draft: boolean
+  head_ref: string
+  base_ref: string
+  head_sha: string
+  author: string
+  author_avatar: string | null
+  html_url: string
+  additions: number
+  deletions: number
+  commits: number
+  changed_files: number
+  comments: PrComment[]
+  checks: CheckRun[]
+}
+
 export const useGithubStore = defineStore('github', () => {
   const user = ref<GhUser | null>(null)
   const accounts = ref<string[]>([])
@@ -139,6 +178,80 @@ export const useGithubStore = defineStore('github', () => {
     }
   }
 
+  // --- in-app PR detail (conversation + checks) ---
+
+  const prDetail = ref<PrDetail | null>(null)
+  const prDetailRepo = ref<string | null>(null)
+  const loadingDetail = ref(false)
+
+  async function openPrDetail(repo: string, number: number) {
+    const remote = await remoteInfo(repo)
+    if (!remote) return
+    prDetailRepo.value = repo
+    loadingDetail.value = true
+    try {
+      prDetail.value = await invoke<PrDetail>('gh_pr_detail', {
+        owner: remote.owner,
+        name: remote.name,
+        number
+      })
+      error.value = null
+    } catch (e) {
+      error.value = String(e)
+    } finally {
+      loadingDetail.value = false
+    }
+  }
+
+  function closePrDetail() {
+    prDetail.value = null
+    prDetailRepo.value = null
+  }
+
+  async function refreshPrDetail() {
+    if (prDetail.value && prDetailRepo.value) {
+      await openPrDetail(prDetailRepo.value, prDetail.value.number)
+    }
+  }
+
+  async function commentOnPr(body: string): Promise<boolean> {
+    if (!prDetail.value || !prDetailRepo.value) return false
+    const remote = await remoteInfo(prDetailRepo.value)
+    if (!remote) return false
+    try {
+      await invoke('gh_pr_comment', {
+        owner: remote.owner,
+        name: remote.name,
+        number: prDetail.value.number,
+        body
+      })
+      await refreshPrDetail()
+      return true
+    } catch (e) {
+      error.value = String(e)
+      return false
+    }
+  }
+
+  async function mergePr(method: 'merge' | 'squash' | 'rebase'): Promise<boolean> {
+    if (!prDetail.value || !prDetailRepo.value) return false
+    const remote = await remoteInfo(prDetailRepo.value)
+    if (!remote) return false
+    try {
+      await invoke('gh_pr_merge', {
+        owner: remote.owner,
+        name: remote.name,
+        number: prDetail.value.number,
+        method
+      })
+      await refreshPrDetail()
+      return true
+    } catch (e) {
+      error.value = String(e)
+      return false
+    }
+  }
+
   async function push(repo: string) {
     syncing.value = 'push'
     try {
@@ -170,7 +283,9 @@ export const useGithubStore = defineStore('github', () => {
   return {
     user, accounts, activeAccount,
     remoteByRepo, prsByRepo, checksBySha, syncing, loadingPrs, error,
+    prDetail, prDetailRepo, loadingDetail,
     init, reload, connectPat, switchAccount, logout,
-    remoteInfo, listPrs, createPr, push, pull
+    remoteInfo, listPrs, createPr, push, pull,
+    openPrDetail, closePrDetail, refreshPrDetail, commentOnPr, mergePr
   }
 })

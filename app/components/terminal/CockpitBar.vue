@@ -21,10 +21,11 @@ function openChanges() {
   ui.view = 'changes'
 }
 
-async function openPr() {
-  if (!cockpit.pr) return
-  const { openUrl } = await import('@tauri-apps/plugin-opener')
-  await openUrl(cockpit.pr.html_url)
+function openPr() {
+  if (!cockpit.pr || !cockpit.activeRepo) return
+  git.selectRepo(cockpit.activeRepo)
+  github.openPrDetail(cockpit.activeRepo, cockpit.pr.number)
+  ui.view = 'changes'
 }
 
 async function doPush() {
@@ -131,7 +132,7 @@ const ciSummary = computed(() => {
       <template v-if="cockpit.pr">
         <button
           class="flex items-center gap-1.5 hover:text-highlighted transition-colors"
-          title="Open pull request in browser"
+          title="Open pull request"
           @click="openPr"
         >
           <UIcon

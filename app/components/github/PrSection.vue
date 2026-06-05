@@ -27,11 +27,6 @@ function ciColor(sha: string): string {
   return 'bg-green-500'
 }
 
-async function openPr(url: string) {
-  const { openUrl } = await import('@tauri-apps/plugin-opener')
-  await openUrl(url)
-}
-
 const generating = ref(false)
 const aiError = ref<string | null>(null)
 
@@ -68,7 +63,8 @@ async function submitPr() {
     title.value = ''
     body.value = ''
     createOpen.value = false
-    openPr(pr.html_url)
+    // open the new PR in-app
+    github.openPrDetail(repo.value, pr.number)
   }
 }
 </script>
@@ -119,7 +115,7 @@ async function submitPr() {
         v-for="pr in prs"
         :key="pr.number"
         class="flex w-full gap-2 text-left group"
-        @click="openPr(pr.html_url)"
+        @click="github.openPrDetail(repo!, pr.number)"
       >
         <span
           class="mt-1 size-1.5 shrink-0 rounded-full"
@@ -137,7 +133,7 @@ async function submitPr() {
           </span>
         </span>
         <UIcon
-          name="i-lucide-external-link"
+          name="i-lucide-panel-right-open"
           class="ml-auto mt-0.5 size-3 shrink-0 text-dimmed opacity-0 group-hover:opacity-100"
         />
       </button>
