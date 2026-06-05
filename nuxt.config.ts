@@ -34,6 +34,15 @@ export default defineNuxtConfig({
   vite: {
     clearScreen: false,
     envPrefix: ['VITE_', 'TAURI_'],
+    optimizeDeps: {
+      include: [
+        '@tauri-apps/api/core',
+        '@tauri-apps/api/event',
+        '@xterm/xterm',
+        '@xterm/addon-fit',
+        '@xterm/addon-webgl'
+      ]
+    },
     server: {
       strictPort: true,
       watch: {

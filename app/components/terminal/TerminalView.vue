@@ -17,7 +17,7 @@ function onExited(id: string) {
 
     <div class="relative flex-1 min-w-0 bg-[#0d0d0d]">
       <!-- Panes stay mounted (v-show) so scrollback survives switching -->
-      <TerminalTerminalPane
+      <TerminalPane
         v-for="session in terminals.sessions"
         v-show="session.id === terminals.activeId"
         :key="session.id"

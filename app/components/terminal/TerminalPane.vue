@@ -57,12 +57,17 @@ onMounted(async () => {
     })
   )
 
-  await invoke('pty_spawn', {
-    id: props.sessionId,
-    cwd: props.cwd,
-    cols: term.cols,
-    rows: term.rows
-  })
+  try {
+    await invoke('pty_spawn', {
+      id: props.sessionId,
+      cwd: props.cwd,
+      cols: term.cols,
+      rows: term.rows
+    })
+  } catch (err) {
+    term.writeln(`\x1b[31mfailed to spawn shell: ${err}\x1b[0m`)
+    return
+  }
 
   term.onData((data) => {
     invoke('pty_write', { id: props.sessionId, data })
