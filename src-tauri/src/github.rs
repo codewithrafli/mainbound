@@ -3,11 +3,14 @@ use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use tauri::State;
 
 use crate::error::{AppError, AppResult};
+use crate::state::AppState;
+use crate::store;
 
 const KEYRING_SERVICE: &str = "dev.tide.app";
-const KEYRING_USER: &str = "github-token";
+const LEGACY_KEYRING_USER: &str = "github-token";
 const API: &str = "https://api.github.com";
 
 fn http() -> &'static reqwest::Client {
@@ -21,32 +24,59 @@ fn http() -> &'static reqwest::Client {
 }
 
 // ---------------------------------------------------------------------------
-// Token storage — macOS Keychain. The token NEVER crosses into the webview.
+// Token storage — macOS Keychain, one entry per account login.
+// Tokens NEVER cross into the webview; logins (not secret) live in the
+// persisted app state for the account switcher.
 // ---------------------------------------------------------------------------
 
-fn keyring_entry() -> AppResult<keyring::Entry> {
-    keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER)
+fn entry_for(login: &str) -> AppResult<keyring::Entry> {
+    keyring::Entry::new(KEYRING_SERVICE, &format!("github-token:{login}"))
         .map_err(|e| AppError::Pty(format!("keychain: {e}")))
 }
 
-fn save_token(token: &str) -> AppResult<()> {
-    keyring_entry()?
+fn token_for(login: &str) -> Option<String> {
+    entry_for(login).ok()?.get_password().ok()
+}
+
+fn active_login(state: &AppState) -> Option<String> {
+    state.store.lock().gh_active.clone()
+}
+
+fn load_token(state: &AppState) -> Option<String> {
+    token_for(&active_login(state)?)
+}
+
+fn require_token(state: &AppState) -> AppResult<String> {
+    load_token(state).ok_or_else(|| AppError::Pty("not connected to GitHub".into()))
+}
+
+/// Registers `login` (storing its token), makes it the active account.
+fn register_account(state: &AppState, login: &str, token: &str) -> AppResult<()> {
+    entry_for(login)?
         .set_password(token)
-        .map_err(|e| AppError::Pty(format!("keychain: {e}")))
-}
-
-fn load_token() -> Option<String> {
-    keyring_entry().ok()?.get_password().ok()
-}
-
-fn delete_token() {
-    if let Ok(entry) = keyring_entry() {
-        let _ = entry.delete_credential();
+        .map_err(|e| AppError::Pty(format!("keychain: {e}")))?;
+    let mut persisted = state.store.lock();
+    if !persisted.gh_accounts.iter().any(|a| a == login) {
+        persisted.gh_accounts.push(login.to_string());
     }
+    persisted.gh_active = Some(login.to_string());
+    store::save(&persisted)
 }
 
-fn require_token() -> AppResult<String> {
-    load_token().ok_or_else(|| AppError::Pty("not connected to GitHub".into()))
+/// One-time migration from the single-account keyring entry.
+async fn migrate_legacy(state: &AppState) {
+    let needs = { state.store.lock().gh_accounts.is_empty() };
+    if !needs {
+        return;
+    }
+    let Ok(legacy) = keyring::Entry::new(KEYRING_SERVICE, LEGACY_KEYRING_USER) else { return };
+    let Ok(token) = legacy.get_password() else { return };
+    if let Ok(user) = api_get(&token, "/user").await {
+        let login = user["login"].as_str().unwrap_or_default().to_string();
+        if !login.is_empty() && register_account(state, &login, &token).is_ok() {
+            let _ = legacy.delete_credential();
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -121,23 +151,60 @@ fn parse_user(v: &serde_json::Value) -> GhUser {
     }
 }
 
-#[tauri::command]
-pub async fn gh_status() -> Option<GhUser> {
-    let token = load_token()?;
-    let user = api_get(&token, "/user").await.ok()?;
-    Some(parse_user(&user))
+#[derive(Serialize, Clone)]
+pub struct GhStatus {
+    pub user: Option<GhUser>,
+    pub accounts: Vec<String>,
+    pub active: Option<String>,
 }
 
 #[tauri::command]
-pub async fn gh_set_pat(token: String) -> AppResult<GhUser> {
+pub async fn gh_status(state: State<'_, AppState>) -> Result<GhStatus, AppError> {
+    migrate_legacy(&state).await;
+    let (accounts, active) = {
+        let persisted = state.store.lock();
+        (persisted.gh_accounts.clone(), persisted.gh_active.clone())
+    };
+    let user = match active.as_deref().and_then(token_for) {
+        Some(token) => api_get(&token, "/user").await.ok().map(|v| parse_user(&v)),
+        None => None,
+    };
+    Ok(GhStatus { user, accounts, active })
+}
+
+#[tauri::command]
+pub async fn gh_set_pat(state: State<'_, AppState>, token: String) -> Result<GhUser, AppError> {
     let user = api_get(&token, "/user").await?;
-    save_token(&token)?;
-    Ok(parse_user(&user))
+    let parsed = parse_user(&user);
+    register_account(&state, &parsed.login, &token)?;
+    Ok(parsed)
 }
 
 #[tauri::command]
-pub fn gh_logout() {
-    delete_token();
+pub fn gh_switch(state: State<'_, AppState>, login: String) -> AppResult<()> {
+    let mut persisted = state.store.lock();
+    if !persisted.gh_accounts.iter().any(|a| a == &login) {
+        return Err(AppError::Pty(format!("unknown account: {login}")));
+    }
+    persisted.gh_active = Some(login);
+    store::save(&persisted)
+}
+
+/// Signs out `login` (or the active account when omitted).
+#[tauri::command]
+pub fn gh_logout(state: State<'_, AppState>, login: Option<String>) -> AppResult<()> {
+    let mut persisted = state.store.lock();
+    let Some(target) = login.or_else(|| persisted.gh_active.clone()) else {
+        return Ok(());
+    };
+    if let Ok(entry) = entry_for(&target) {
+        let _ = entry.delete_credential();
+    }
+    persisted.gh_accounts.retain(|a| a != &target);
+    if persisted.gh_active.as_deref() == Some(&target) {
+        persisted.gh_active = persisted.gh_accounts.first().cloned();
+    }
+    store::save(&persisted)
 }
 
 #[derive(Serialize, Clone)]
@@ -186,7 +253,11 @@ pub struct PollResult {
 }
 
 #[tauri::command]
-pub async fn gh_device_poll(client_id: String, device_code: String) -> AppResult<PollResult> {
+pub async fn gh_device_poll(
+    state: State<'_, AppState>,
+    client_id: String,
+    device_code: String,
+) -> Result<PollResult, AppError> {
     let body: serde_json::Value = http()
         .post("https://github.com/login/oauth/access_token")
         .header("Accept", "application/json")
@@ -204,8 +275,9 @@ pub async fn gh_device_poll(client_id: String, device_code: String) -> AppResult
 
     if let Some(token) = body["access_token"].as_str() {
         let user = api_get(token, "/user").await?;
-        save_token(token)?;
-        return Ok(PollResult { status: "ok".into(), user: Some(parse_user(&user)) });
+        let parsed = parse_user(&user);
+        register_account(&state, &parsed.login, token)?;
+        return Ok(PollResult { status: "ok".into(), user: Some(parsed) });
     }
     let status = match body["error"].as_str() {
         Some("authorization_pending") => "pending",
@@ -323,8 +395,13 @@ fn parse_pr(v: &serde_json::Value) -> Pr {
 /// The open PR whose head is `branch` (same-repo heads only — forks
 /// would need a different owner prefix).
 #[tauri::command]
-pub async fn gh_pr_for_branch(owner: String, name: String, branch: String) -> AppResult<Option<Pr>> {
-    let token = require_token()?;
+pub async fn gh_pr_for_branch(
+    state: State<'_, AppState>,
+    owner: String,
+    name: String,
+    branch: String,
+) -> Result<Option<Pr>, AppError> {
+    let token = require_token(&state)?;
     let body = api_get(
         &token,
         &format!("/repos/{owner}/{name}/pulls?head={owner}:{branch}&state=open"),
@@ -343,8 +420,13 @@ pub struct ReviewSummary {
 /// Latest meaningful review state per reviewer (APPROVED /
 /// CHANGES_REQUESTED win over COMMENTED).
 #[tauri::command]
-pub async fn gh_pr_reviews(owner: String, name: String, number: u64) -> AppResult<ReviewSummary> {
-    let token = require_token()?;
+pub async fn gh_pr_reviews(
+    state: State<'_, AppState>,
+    owner: String,
+    name: String,
+    number: u64,
+) -> Result<ReviewSummary, AppError> {
+    let token = require_token(&state)?;
     let body = api_get(
         &token,
         &format!("/repos/{owner}/{name}/pulls/{number}/reviews?per_page=100"),
@@ -381,22 +463,27 @@ pub async fn gh_pr_reviews(owner: String, name: String, number: u64) -> AppResul
 }
 
 #[tauri::command]
-pub async fn gh_list_prs(owner: String, name: String) -> AppResult<Vec<Pr>> {
-    let token = require_token()?;
+pub async fn gh_list_prs(
+    state: State<'_, AppState>,
+    owner: String,
+    name: String,
+) -> Result<Vec<Pr>, AppError> {
+    let token = require_token(&state)?;
     let body = api_get(&token, &format!("/repos/{owner}/{name}/pulls?state=open&per_page=30")).await?;
     Ok(body.as_array().map(|prs| prs.iter().map(parse_pr).collect()).unwrap_or_default())
 }
 
 #[tauri::command]
 pub async fn gh_create_pr(
+    state: State<'_, AppState>,
     owner: String,
     name: String,
     head: String,
     base: String,
     title: String,
     body: Option<String>,
-) -> AppResult<Pr> {
-    let token = require_token()?;
+) -> Result<Pr, AppError> {
+    let token = require_token(&state)?;
     let pr = api_post(
         &token,
         &format!("/repos/{owner}/{name}/pulls"),
@@ -415,8 +502,13 @@ pub struct CheckSummary {
 }
 
 #[tauri::command]
-pub async fn gh_pr_checks(owner: String, name: String, sha: String) -> AppResult<CheckSummary> {
-    let token = require_token()?;
+pub async fn gh_pr_checks(
+    state: State<'_, AppState>,
+    owner: String,
+    name: String,
+    sha: String,
+) -> Result<CheckSummary, AppError> {
+    let token = require_token(&state)?;
     let body = api_get(&token, &format!("/repos/{owner}/{name}/commits/{sha}/check-runs?per_page=100")).await?;
     let mut summary = CheckSummary { total: 0, passed: 0, failed: 0, pending: 0 };
     if let Some(runs) = body["check_runs"].as_array() {

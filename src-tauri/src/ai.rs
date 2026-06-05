@@ -71,6 +71,63 @@ fn extract_json(raw: &str) -> Option<serde_json::Value> {
     serde_json::from_str(raw.get(start..=end)?).ok()
 }
 
+#[derive(Serialize, Clone)]
+pub struct PrSuggestion {
+    pub title: String,
+    pub body: String,
+}
+
+#[tauri::command]
+pub async fn ai_pr_message(repo: String, base: String) -> AppResult<PrSuggestion> {
+    tauri::async_runtime::spawn_blocking(move || {
+        // base may only exist on the remote
+        let base_ref = if run_git(&repo, &["rev-parse", "--verify", &base]).is_ok() {
+            base.clone()
+        } else {
+            format!("origin/{base}")
+        };
+
+        let commits = run_git(&repo, &["log", "--oneline", &format!("{base_ref}..HEAD")])?;
+        if commits.trim().is_empty() {
+            return Err(AppError::Pty(format!(
+                "no commits ahead of {base} — commit and push your work first"
+            )));
+        }
+        let range = format!("{base_ref}...HEAD");
+        let stat = run_git(&repo, &["diff", "--stat", &range])?;
+        let mut diff = run_git(&repo, &["diff", &range])?;
+        if diff.len() > MAX_DIFF_CHARS {
+            let mut cut = MAX_DIFF_CHARS;
+            while !diff.is_char_boundary(cut) {
+                cut -= 1;
+            }
+            diff.truncate(cut);
+            diff.push_str("\n[... diff truncated ...]");
+        }
+
+        let prompt = format!(
+            "Generate a pull request title and description for the branch changes below.\n\
+             Reply with ONLY a JSON object, no other text:\n\
+             {{\"title\": \"<concise PR title, max 72 chars, conventional commit style>\", \"body\": \"<markdown description: a short Summary paragraph, then a '## Changes' bullet list of the key changes. Keep it factual and scannable.>\"}}\n\n\
+             Commits on this branch:\n{commits}\n\nFile stats:\n{stat}\n\nDiff (may be truncated):\n{diff}"
+        );
+
+        let raw = run_claude(&repo, &prompt)?;
+        let json = extract_json(&raw)
+            .ok_or_else(|| AppError::Pty(format!("unexpected AI output: {}", raw.trim())))?;
+        let title = json["title"].as_str().unwrap_or_default().trim().to_string();
+        if title.is_empty() {
+            return Err(AppError::Pty("AI returned an empty title".into()));
+        }
+        Ok(PrSuggestion {
+            title,
+            body: json["body"].as_str().unwrap_or_default().trim().to_string(),
+        })
+    })
+    .await
+    .map_err(|e| AppError::Pty(e.to_string()))?
+}
+
 #[tauri::command]
 pub async fn ai_commit_message(repo: String) -> AppResult<CommitSuggestion> {
     tauri::async_runtime::spawn_blocking(move || {

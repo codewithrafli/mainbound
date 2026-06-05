@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { invoke } from '@tauri-apps/api/core'
+
 const git = useGitStore()
 const github = useGithubStore()
 
@@ -28,6 +30,27 @@ function ciColor(sha: string): string {
 async function openPr(url: string) {
   const { openUrl } = await import('@tauri-apps/plugin-opener')
   await openUrl(url)
+}
+
+const generating = ref(false)
+const aiError = ref<string | null>(null)
+
+async function generateWithAi() {
+  if (!repo.value || generating.value) return
+  generating.value = true
+  aiError.value = null
+  try {
+    const suggestion = await invoke<{ title: string, body: string }>('ai_pr_message', {
+      repo: repo.value,
+      base: base.value.trim() || 'main'
+    })
+    title.value = suggestion.title
+    body.value = suggestion.body
+  } catch (e) {
+    aiError.value = String(e)
+  } finally {
+    generating.value = false
+  }
 }
 
 async function submitPr() {
@@ -170,6 +193,22 @@ async function submitPr() {
             :rows="4"
             size="sm"
             class="w-full"
+          />
+          <UButton
+            :label="generating ? 'Generating…' : 'Generate with AI'"
+            icon="i-lucide-sparkles"
+            color="neutral"
+            variant="link"
+            size="xs"
+            :loading="generating"
+            @click="generateWithAi"
+          />
+          <UAlert
+            v-if="aiError"
+            color="error"
+            variant="soft"
+            :description="aiError"
+            class="text-xs"
           />
           <UButton
             label="Create Pull Request"

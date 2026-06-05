@@ -18,6 +18,11 @@ pub struct PersistedState {
     pub workspaces: Vec<Workspace>,
     #[serde(default)]
     pub last_workspace: Option<String>,
+    /// GitHub account logins (tokens live in the Keychain, one entry each)
+    #[serde(default)]
+    pub gh_accounts: Vec<String>,
+    #[serde(default)]
+    pub gh_active: Option<String>,
 }
 
 fn state_file() -> PathBuf {

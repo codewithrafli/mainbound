@@ -71,7 +71,7 @@ async function pollDevice(code: DeviceCode) {
         deviceCode: code.device_code
       })
       if (result.status === 'ok') {
-        github.user = result.user
+        await github.reload()
         userCode.value = null
         open.value = false
         return

@@ -94,6 +94,7 @@ pub fn run() {
     .manage(AppState::new())
     .invoke_handler(tauri::generate_handler![
       ai::ai_commit_message,
+      ai::ai_pr_message,
       pty::pty_spawn,
       pty::pty_write,
       pty::pty_resize,
@@ -111,6 +112,7 @@ pub fn run() {
       git::git_log,
       github::gh_status,
       github::gh_set_pat,
+      github::gh_switch,
       github::gh_logout,
       github::gh_device_start,
       github::gh_device_poll,
