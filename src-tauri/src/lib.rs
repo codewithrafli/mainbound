@@ -111,6 +111,7 @@ pub fn run() {
       git::git_log,
       github::gh_status,
       github::gh_set_pat,
+      github::gh_switch,
       github::gh_logout,
       github::gh_device_start,
       github::gh_device_poll,

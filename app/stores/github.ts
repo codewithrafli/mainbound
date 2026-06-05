@@ -31,8 +31,16 @@ export interface CheckSummary {
   pending: number
 }
 
+export interface GhStatusResponse {
+  user: GhUser | null
+  accounts: string[]
+  active: string | null
+}
+
 export const useGithubStore = defineStore('github', () => {
   const user = ref<GhUser | null>(null)
+  const accounts = ref<string[]>([])
+  const activeAccount = ref<string | null>(null)
   const initialized = ref(false)
   const remoteByRepo = ref<Record<string, RemoteInfo | null>>({})
   const prsByRepo = ref<Record<string, Pr[]>>({})
@@ -41,20 +49,36 @@ export const useGithubStore = defineStore('github', () => {
   const loadingPrs = ref(false)
   const error = ref<string | null>(null)
 
+  /** Re-reads auth state and drops per-account caches. */
+  async function reload() {
+    const status = await invoke<GhStatusResponse>('gh_status').catch(() => null)
+    user.value = status?.user ?? null
+    accounts.value = status?.accounts ?? []
+    activeAccount.value = status?.active ?? null
+    prsByRepo.value = {}
+    checksBySha.value = {}
+  }
+
   async function init() {
     if (initialized.value) return
     initialized.value = true
-    user.value = await invoke<GhUser | null>('gh_status').catch(() => null)
+    await reload()
   }
 
   async function connectPat(token: string) {
-    user.value = await invoke<GhUser>('gh_set_pat', { token })
+    await invoke<GhUser>('gh_set_pat', { token })
+    await reload()
   }
 
-  async function logout() {
-    await invoke('gh_logout')
-    user.value = null
-    prsByRepo.value = {}
+  async function switchAccount(login: string) {
+    if (login === activeAccount.value) return
+    await invoke('gh_switch', { login })
+    await reload()
+  }
+
+  async function logout(login?: string) {
+    await invoke('gh_logout', { login: login ?? null })
+    await reload()
   }
 
   async function remoteInfo(repo: string): Promise<RemoteInfo | null> {
@@ -144,7 +168,9 @@ export const useGithubStore = defineStore('github', () => {
   }
 
   return {
-    user, remoteByRepo, prsByRepo, checksBySha, syncing, loadingPrs, error,
-    init, connectPat, logout, remoteInfo, listPrs, createPr, push, pull
+    user, accounts, activeAccount,
+    remoteByRepo, prsByRepo, checksBySha, syncing, loadingPrs, error,
+    init, reload, connectPat, switchAccount, logout,
+    remoteInfo, listPrs, createPr, push, pull
   }
 })
