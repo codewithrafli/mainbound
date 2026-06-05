@@ -528,6 +528,8 @@ pub struct PrComment {
     /// file path for inline review comments
     pub path: Option<String>,
     pub line: Option<u64>,
+    /// surrounding diff context for inline review comments
+    pub diff_hunk: Option<String>,
     /// "comment" | "review:APPROVED" | "review:CHANGES_REQUESTED" | "review:COMMENTED" | "inline"
     pub kind: String,
 }
@@ -598,6 +600,7 @@ pub async fn gh_pr_detail(
                 created_at: c["created_at"].as_str().unwrap_or_default().to_string(),
                 path: None,
                 line: None,
+                diff_hunk: None,
                 kind: "comment".into(),
             });
         }
@@ -617,6 +620,7 @@ pub async fn gh_pr_detail(
                 created_at: r["submitted_at"].as_str().unwrap_or_default().to_string(),
                 path: None,
                 line: None,
+                diff_hunk: None,
                 kind: format!("review:{review_state}"),
             });
         }
@@ -630,6 +634,7 @@ pub async fn gh_pr_detail(
                 created_at: c["created_at"].as_str().unwrap_or_default().to_string(),
                 path: c["path"].as_str().map(String::from),
                 line: c["line"].as_u64().or_else(|| c["original_line"].as_u64()),
+                diff_hunk: c["diff_hunk"].as_str().map(String::from),
                 kind: "inline".into(),
             });
         }

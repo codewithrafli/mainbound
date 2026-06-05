@@ -44,6 +44,7 @@ export interface PrComment {
   created_at: string
   path: string | null
   line: number | null
+  diff_hunk: string | null
   kind: string
 }
 

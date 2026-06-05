@@ -54,6 +54,22 @@ function commentBadge(comment: PrComment): { label: string, class: string } | nu
   return null
 }
 
+/** Last few lines of the diff hunk — enough context, GitHub-style. */
+function hunkTail(hunk: string): Array<{ text: string, cls: string }> {
+  return hunk
+    .split('\n')
+    .filter(line => !line.startsWith('@@'))
+    .slice(-4)
+    .map(line => ({
+      text: line,
+      cls: line.startsWith('+')
+        ? 'text-green-400 bg-green-500/10'
+        : line.startsWith('-')
+          ? 'text-red-400 bg-red-500/10'
+          : 'text-muted'
+    }))
+}
+
 function checkDot(check: CheckRun): string {
   if (check.status !== 'completed') return 'bg-amber-400'
   switch (check.conclusion) {
@@ -232,9 +248,7 @@ const stateBadge = computed(() => {
           v-if="pr.body"
           class="rounded-lg border border-default bg-muted p-3"
         >
-          <p class="text-[12px] text-toned whitespace-pre-wrap break-words">
-            {{ pr.body }}
-          </p>
+          <MarkdownBody :source="pr.body" />
         </div>
 
         <div
@@ -264,20 +278,39 @@ const stateBadge = computed(() => {
               >{{ commentBadge(comment)!.label }}</span>
               <span class="text-dimmed ml-1.5">{{ relativeDate(comment.created_at) }}</span>
             </p>
-            <p
+            <!-- inline review comment: file header + diff context, GitHub-style -->
+            <div
               v-if="comment.path"
-              class="text-[10px] font-mono text-dimmed pt-0.5 truncate"
+              class="mt-1.5 rounded-md border border-default overflow-hidden"
             >
-              {{ comment.path }}<template v-if="comment.line">
-                :{{ comment.line }}
-              </template>
-            </p>
-            <p
-              v-if="comment.body"
-              class="text-[12px] text-toned whitespace-pre-wrap break-words pt-1"
+              <p class="px-2.5 py-1.5 bg-elevated text-[10px] font-mono text-muted truncate border-b border-default">
+                {{ comment.path }}<template v-if="comment.line">
+                  :{{ comment.line }}
+                </template>
+              </p>
+              <pre
+                v-if="comment.diff_hunk"
+                class="text-[11px] font-mono leading-snug overflow-x-auto bg-[#0d0d0d]"
+              ><div
+                v-for="(hunkLine, j) in hunkTail(comment.diff_hunk)"
+                :key="j"
+                class="px-2.5 whitespace-pre"
+                :class="hunkLine.cls"
+              >{{ hunkLine.text }}</div></pre>
+              <div
+                v-if="comment.body"
+                class="p-2.5 border-t border-default"
+              >
+                <MarkdownBody :source="comment.body" />
+              </div>
+            </div>
+
+            <div
+              v-else-if="comment.body"
+              class="pt-1"
             >
-              {{ comment.body }}
-            </p>
+              <MarkdownBody :source="comment.body" />
+            </div>
           </div>
         </div>
 
