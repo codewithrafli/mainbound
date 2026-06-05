@@ -37,15 +37,35 @@ export interface GhStatusResponse {
   active: string | null
 }
 
-export interface PrComment {
+export interface TimelineItem {
+  kind: 'comment' | 'review' | 'commit' | 'event'
   author: string
   avatar_url: string | null
+  association: string | null
   body: string
   created_at: string
-  path: string | null
-  line: number | null
+  sha: string | null
+  review_state: string | null
+  event: string | null
+}
+
+export interface ThreadComment {
+  id: number
+  author: string
+  avatar_url: string | null
+  association: string | null
+  body: string
+  created_at: string
   diff_hunk: string | null
-  kind: string
+}
+
+export interface ReviewThread {
+  id: string
+  resolved: boolean
+  outdated: boolean
+  path: string
+  line: number | null
+  comments: ThreadComment[]
 }
 
 export interface CheckRun {
@@ -73,7 +93,8 @@ export interface PrDetail {
   deletions: number
   commits: number
   changed_files: number
-  comments: PrComment[]
+  timeline: TimelineItem[]
+  threads: ReviewThread[]
   checks: CheckRun[]
 }
 
@@ -234,6 +255,37 @@ export const useGithubStore = defineStore('github', () => {
     }
   }
 
+  async function replyToThread(commentId: number, body: string): Promise<boolean> {
+    if (!prDetail.value || !prDetailRepo.value) return false
+    const remote = await remoteInfo(prDetailRepo.value)
+    if (!remote) return false
+    try {
+      await invoke('gh_pr_reply_thread', {
+        owner: remote.owner,
+        name: remote.name,
+        number: prDetail.value.number,
+        commentId,
+        body
+      })
+      await refreshPrDetail()
+      return true
+    } catch (e) {
+      error.value = String(e)
+      return false
+    }
+  }
+
+  async function resolveThread(threadId: string, resolved: boolean): Promise<boolean> {
+    try {
+      await invoke('gh_pr_resolve_thread', { threadId, resolved })
+      await refreshPrDetail()
+      return true
+    } catch (e) {
+      error.value = String(e)
+      return false
+    }
+  }
+
   async function mergePr(method: 'merge' | 'squash' | 'rebase'): Promise<boolean> {
     if (!prDetail.value || !prDetailRepo.value) return false
     const remote = await remoteInfo(prDetailRepo.value)
@@ -287,6 +339,7 @@ export const useGithubStore = defineStore('github', () => {
     prDetail, prDetailRepo, loadingDetail,
     init, reload, connectPat, switchAccount, logout,
     remoteInfo, listPrs, createPr, push, pull,
-    openPrDetail, closePrDetail, refreshPrDetail, commentOnPr, mergePr
+    openPrDetail, closePrDetail, refreshPrDetail, commentOnPr,
+    replyToThread, resolveThread, mergePr
   }
 })

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { CheckRun, PrComment } from '~/stores/github'
+import type { CheckRun, ReviewThread, TimelineItem } from '~/stores/github'
 
 const github = useGithubStore()
 const git = useGitStore()
@@ -12,6 +12,57 @@ const mergeMethod = ref<'merge' | 'squash' | 'rebase'>('merge')
 const merging = ref(false)
 
 const pr = computed(() => github.prDetail)
+
+type Entry
+  = | { type: 'timeline', at: string, item: TimelineItem }
+    | { type: 'thread', at: string, thread: ReviewThread }
+
+/** Timeline items and review threads interleaved by time, GitHub-style. */
+const conversation = computed<Entry[]>(() => {
+  if (!pr.value) return []
+  const entries: Entry[] = [
+    ...pr.value.timeline.map(item => ({
+      type: 'timeline' as const,
+      at: item.created_at,
+      item
+    })),
+    ...pr.value.threads.map(thread => ({
+      type: 'thread' as const,
+      at: thread.comments[0]?.created_at ?? '',
+      thread
+    }))
+  ]
+  return entries.sort((a, b) => a.at.localeCompare(b.at))
+})
+
+const conversationCount = computed(() =>
+  conversation.value.filter(e =>
+    e.type === 'thread' || e.item.kind === 'comment' || e.item.kind === 'review'
+  ).length
+)
+
+function eventLabel(item: TimelineItem): string {
+  switch (item.event) {
+    case 'merged': return 'merged this pull request'
+    case 'closed': return 'closed this'
+    case 'reopened': return 'reopened this'
+    case 'head_ref_force_pushed': return 'force-pushed the branch'
+    case 'review_requested':
+      return item.body ? `requested a review from ${item.body}` : 'requested a review'
+    default: return item.event ?? ''
+  }
+}
+
+function eventIcon(item: TimelineItem): { icon: string, cls: string } {
+  switch (item.event) {
+    case 'merged': return { icon: 'i-lucide-git-merge', cls: 'text-purple-400' }
+    case 'closed': return { icon: 'i-lucide-circle-x', cls: 'text-red-400' }
+    case 'reopened': return { icon: 'i-lucide-circle-dot', cls: 'text-green-500' }
+    case 'head_ref_force_pushed': return { icon: 'i-lucide-zap', cls: 'text-amber-400' }
+    case 'review_requested': return { icon: 'i-lucide-eye', cls: 'text-dimmed' }
+    default: return { icon: 'i-lucide-circle', cls: 'text-dimmed' }
+  }
+}
 
 async function openInBrowser() {
   if (!pr.value) return
@@ -33,41 +84,6 @@ async function doMerge() {
   merging.value = false
   mergeOpen.value = false
   if (ok && github.prDetailRepo) git.refresh(github.prDetailRepo)
-}
-
-function relativeDate(iso: string): string {
-  if (!iso) return ''
-  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  if (days < 30) return `${days}d ago`
-  return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
-}
-
-function commentBadge(comment: PrComment): { label: string, class: string } | null {
-  if (comment.kind === 'review:APPROVED') return { label: 'approved', class: 'text-green-500' }
-  if (comment.kind === 'review:CHANGES_REQUESTED') return { label: 'requested changes', class: 'text-red-400' }
-  if (comment.kind.startsWith('review:')) return { label: 'reviewed', class: 'text-dimmed' }
-  return null
-}
-
-/** Last few lines of the diff hunk — enough context, GitHub-style. */
-function hunkTail(hunk: string): Array<{ text: string, cls: string }> {
-  return hunk
-    .split('\n')
-    .filter(line => !line.startsWith('@@'))
-    .slice(-4)
-    .map(line => ({
-      text: line,
-      cls: line.startsWith('+')
-        ? 'text-green-400 bg-green-500/10'
-        : line.startsWith('-')
-          ? 'text-red-400 bg-red-500/10'
-          : 'text-muted'
-    }))
 }
 
 function checkDot(check: CheckRun): string {
@@ -222,7 +238,7 @@ const stateBadge = computed(() => {
         <div class="flex gap-1">
           <UButton
             label="Conversation"
-            :badge="pr.comments.length || undefined"
+            :badge="conversationCount || undefined"
             color="neutral"
             :variant="tab === 'conversation' ? 'soft' : 'ghost'"
             size="xs"
@@ -241,85 +257,70 @@ const stateBadge = computed(() => {
       <!-- conversation -->
       <div
         v-show="tab === 'conversation'"
-        class="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-4"
+        class="flex-1 min-h-0 overflow-y-auto px-4 py-3"
       >
-        <!-- PR body -->
-        <div
-          v-if="pr.body"
-          class="rounded-lg border border-default bg-muted p-3"
-        >
-          <MarkdownBody :source="pr.body" />
-        </div>
+        <div class="max-w-3xl space-y-3">
+          <!-- PR description as the first card -->
+          <GithubCommentCard
+            :author="pr.author"
+            :avatar-url="pr.author_avatar"
+            :created-at="''"
+            :body="pr.body || '*No description provided.*'"
+            :pr-author="pr.author"
+          />
 
-        <div
-          v-for="(comment, i) in pr.comments"
-          :key="i"
-          class="flex gap-2.5"
-        >
-          <UAvatar
-            v-if="comment.avatar_url"
-            :src="comment.avatar_url"
-            :alt="comment.author"
-            size="2xs"
-            class="mt-0.5 shrink-0"
-          />
-          <UIcon
-            v-else
-            name="i-lucide-user"
-            class="size-5 mt-0.5 shrink-0 text-dimmed"
-          />
-          <div class="min-w-0 flex-1">
-            <p class="text-[11px] leading-tight">
-              <span class="font-medium text-toned">{{ comment.author }}</span>
-              <span
-                v-if="commentBadge(comment)"
-                class="ml-1.5"
-                :class="commentBadge(comment)!.class"
-              >{{ commentBadge(comment)!.label }}</span>
-              <span class="text-dimmed ml-1.5">{{ relativeDate(comment.created_at) }}</span>
-            </p>
-            <!-- inline review comment: file header + diff context, GitHub-style -->
+          <template
+            v-for="(entry, i) in conversation"
+            :key="i"
+          >
+            <!-- comment / review cards -->
+            <GithubCommentCard
+              v-if="entry.type === 'timeline' && (entry.item.kind === 'comment' || entry.item.kind === 'review')"
+              :author="entry.item.author"
+              :avatar-url="entry.item.avatar_url"
+              :association="entry.item.association"
+              :created-at="entry.item.created_at"
+              :body="entry.item.body"
+              :verdict="entry.item.kind === 'review' ? entry.item.review_state : null"
+              :pr-author="pr.author"
+            />
+
+            <!-- commit row -->
             <div
-              v-if="comment.path"
-              class="mt-1.5 rounded-md border border-default overflow-hidden"
+              v-else-if="entry.type === 'timeline' && entry.item.kind === 'commit'"
+              class="flex items-center gap-2 pl-1 text-[11px] text-muted"
             >
-              <p class="px-2.5 py-1.5 bg-elevated text-[10px] font-mono text-muted truncate border-b border-default">
-                {{ comment.path }}<template v-if="comment.line">
-                  :{{ comment.line }}
-                </template>
-              </p>
-              <pre
-                v-if="comment.diff_hunk"
-                class="text-[11px] font-mono leading-snug overflow-x-auto bg-[#0d0d0d]"
-              ><div
-                v-for="(hunkLine, j) in hunkTail(comment.diff_hunk)"
-                :key="j"
-                class="px-2.5 whitespace-pre"
-                :class="hunkLine.cls"
-              >{{ hunkLine.text }}</div></pre>
-              <div
-                v-if="comment.body"
-                class="p-2.5 border-t border-default"
-              >
-                <MarkdownBody :source="comment.body" />
-              </div>
+              <UIcon
+                name="i-lucide-git-commit-horizontal"
+                class="size-3.5 shrink-0 text-dimmed"
+              />
+              <span class="truncate font-mono text-toned">{{ entry.item.body }}</span>
+              <span class="flex-1" />
+              <span class="font-mono text-dimmed">{{ entry.item.sha }}</span>
             </div>
 
+            <!-- event row -->
             <div
-              v-else-if="comment.body"
-              class="pt-1"
+              v-else-if="entry.type === 'timeline' && entry.item.kind === 'event'"
+              class="flex items-center gap-2 pl-1 text-[11px] text-muted"
             >
-              <MarkdownBody :source="comment.body" />
+              <UIcon
+                :name="eventIcon(entry.item).icon"
+                class="size-3.5 shrink-0"
+                :class="eventIcon(entry.item).cls"
+              />
+              <span><span class="font-medium text-toned">{{ entry.item.author }}</span> {{ eventLabel(entry.item) }}</span>
+              <span class="text-dimmed">{{ useRelativeDate(entry.item.created_at) }}</span>
             </div>
-          </div>
-        </div>
 
-        <p
-          v-if="!pr.comments.length && !pr.body"
-          class="text-xs text-dimmed italic"
-        >
-          No conversation yet.
-        </p>
+            <!-- inline review thread -->
+            <GithubThreadCard
+              v-else-if="entry.type === 'thread'"
+              :thread="entry.thread"
+              :pr-author="pr.author"
+            />
+          </template>
+        </div>
       </div>
 
       <!-- checks -->

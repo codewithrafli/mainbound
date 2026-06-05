@@ -126,6 +126,8 @@ pub fn run() {
       github::gh_pr_reviews,
       github::gh_pr_detail,
       github::gh_pr_comment,
+      github::gh_pr_reply_thread,
+      github::gh_pr_resolve_thread,
       github::gh_pr_merge,
       workspace::workspace_list,
       workspace::workspace_add,

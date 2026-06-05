@@ -520,26 +520,52 @@ pub async fn gh_create_pr(
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Clone)]
-pub struct PrComment {
-    pub author: String,
-    pub avatar_url: Option<String>,
-    pub body: String,
-    pub created_at: String,
-    /// file path for inline review comments
-    pub path: Option<String>,
-    pub line: Option<u64>,
-    /// surrounding diff context for inline review comments
-    pub diff_hunk: Option<String>,
-    /// "comment" | "review:APPROVED" | "review:CHANGES_REQUESTED" | "review:COMMENTED" | "inline"
-    pub kind: String,
-}
-
-#[derive(Serialize, Clone)]
 pub struct CheckRun {
     pub name: String,
     pub status: String,
     pub conclusion: Option<String>,
     pub url: Option<String>,
+}
+
+/// One entry of the GitHub-style conversation timeline.
+#[derive(Serialize, Clone)]
+pub struct TimelineItem {
+    /// "comment" | "review" | "commit" | "event"
+    pub kind: String,
+    pub author: String,
+    pub avatar_url: Option<String>,
+    /// OWNER | MEMBER | COLLABORATOR | CONTRIBUTOR | NONE
+    pub association: Option<String>,
+    pub body: String,
+    pub created_at: String,
+    pub sha: Option<String>,
+    /// approved | changes_requested | commented | dismissed
+    pub review_state: Option<String>,
+    /// merged | closed | reopened | review_requested | head_ref_force_pushed
+    pub event: Option<String>,
+}
+
+#[derive(Serialize, Clone)]
+pub struct ThreadComment {
+    /// REST databaseId — used for replies
+    pub id: u64,
+    pub author: String,
+    pub avatar_url: Option<String>,
+    pub association: Option<String>,
+    pub body: String,
+    pub created_at: String,
+    pub diff_hunk: Option<String>,
+}
+
+#[derive(Serialize, Clone)]
+pub struct ReviewThread {
+    /// GraphQL node id — used for resolve/unresolve
+    pub id: String,
+    pub resolved: bool,
+    pub outdated: bool,
+    pub path: String,
+    pub line: Option<u64>,
+    pub comments: Vec<ThreadComment>,
 }
 
 #[derive(Serialize, Clone)]
@@ -561,8 +587,169 @@ pub struct PrDetail {
     pub deletions: u64,
     pub commits: u64,
     pub changed_files: u64,
-    pub comments: Vec<PrComment>,
+    pub timeline: Vec<TimelineItem>,
+    pub threads: Vec<ReviewThread>,
     pub checks: Vec<CheckRun>,
+}
+
+async fn graphql(token: &str, query: &str, variables: serde_json::Value) -> AppResult<serde_json::Value> {
+    let resp = http()
+        .post("https://api.github.com/graphql")
+        .bearer_auth(token)
+        .json(&json!({ "query": query, "variables": variables }))
+        .send()
+        .await
+        .map_err(|e| AppError::Pty(format!("github: {e}")))?;
+    let body: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| AppError::Pty(format!("github: {e}")))?;
+    if let Some(errors) = body["errors"].as_array() {
+        if let Some(first) = errors.first() {
+            return Err(AppError::Pty(format!(
+                "github: {}",
+                first["message"].as_str().unwrap_or("graphql error")
+            )));
+        }
+    }
+    Ok(body["data"].clone())
+}
+
+const THREADS_QUERY: &str = r#"
+query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      reviewThreads(first: 50) {
+        nodes {
+          id isResolved isOutdated path line
+          comments(first: 50) {
+            nodes {
+              databaseId body createdAt diffHunk authorAssociation
+              author { login avatarUrl }
+            }
+          }
+        }
+      }
+    }
+  }
+}"#;
+
+async fn fetch_threads(token: &str, owner: &str, name: &str, number: u64) -> Vec<ReviewThread> {
+    let Ok(data) = graphql(
+        token,
+        THREADS_QUERY,
+        json!({ "owner": owner, "name": name, "number": number }),
+    )
+    .await
+    else {
+        return Vec::new();
+    };
+    let mut threads = Vec::new();
+    let nodes = data["repository"]["pullRequest"]["reviewThreads"]["nodes"].clone();
+    if let Some(list) = nodes.as_array() {
+        for t in list {
+            let mut comments = Vec::new();
+            if let Some(cs) = t["comments"]["nodes"].as_array() {
+                for c in cs {
+                    comments.push(ThreadComment {
+                        id: c["databaseId"].as_u64().unwrap_or(0),
+                        author: c["author"]["login"].as_str().unwrap_or_default().to_string(),
+                        avatar_url: c["author"]["avatarUrl"].as_str().map(String::from),
+                        association: c["authorAssociation"].as_str().map(String::from),
+                        body: c["body"].as_str().unwrap_or_default().to_string(),
+                        created_at: c["createdAt"].as_str().unwrap_or_default().to_string(),
+                        diff_hunk: c["diffHunk"].as_str().map(String::from),
+                    });
+                }
+            }
+            threads.push(ReviewThread {
+                id: t["id"].as_str().unwrap_or_default().to_string(),
+                resolved: t["isResolved"].as_bool().unwrap_or(false),
+                outdated: t["isOutdated"].as_bool().unwrap_or(false),
+                path: t["path"].as_str().unwrap_or_default().to_string(),
+                line: t["line"].as_u64(),
+                comments,
+            });
+        }
+    }
+    threads
+}
+
+fn parse_timeline(items: &serde_json::Value) -> Vec<TimelineItem> {
+    let mut timeline = Vec::new();
+    let Some(list) = items.as_array() else { return timeline };
+    for item in list {
+        let event = item["event"].as_str().unwrap_or_default();
+        match event {
+            "commented" => timeline.push(TimelineItem {
+                kind: "comment".into(),
+                author: item["user"]["login"].as_str().unwrap_or_default().to_string(),
+                avatar_url: item["user"]["avatar_url"].as_str().map(String::from),
+                association: item["author_association"].as_str().map(String::from),
+                body: item["body"].as_str().unwrap_or_default().to_string(),
+                created_at: item["created_at"].as_str().unwrap_or_default().to_string(),
+                sha: None,
+                review_state: None,
+                event: None,
+            }),
+            "reviewed" => {
+                let review_state = item["state"].as_str().unwrap_or_default().to_string();
+                let body = item["body"].as_str().unwrap_or_default().to_string();
+                // empty "commented" review shells carry no info (their
+                // substance lives in the review threads)
+                if body.is_empty() && review_state == "commented" {
+                    continue;
+                }
+                timeline.push(TimelineItem {
+                    kind: "review".into(),
+                    author: item["user"]["login"].as_str().unwrap_or_default().to_string(),
+                    avatar_url: item["user"]["avatar_url"].as_str().map(String::from),
+                    association: item["author_association"].as_str().map(String::from),
+                    body,
+                    created_at: item["submitted_at"].as_str().unwrap_or_default().to_string(),
+                    sha: None,
+                    review_state: Some(review_state),
+                    event: None,
+                });
+            }
+            "committed" => timeline.push(TimelineItem {
+                kind: "commit".into(),
+                author: item["author"]["name"].as_str().unwrap_or_default().to_string(),
+                avatar_url: None,
+                association: None,
+                body: item["message"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .lines()
+                    .next()
+                    .unwrap_or_default()
+                    .to_string(),
+                created_at: item["author"]["date"].as_str().unwrap_or_default().to_string(),
+                sha: item["sha"].as_str().map(|s| s.get(..7).unwrap_or(s).to_string()),
+                review_state: None,
+                event: None,
+            }),
+            "merged" | "closed" | "reopened" | "review_requested" | "head_ref_force_pushed" => {
+                timeline.push(TimelineItem {
+                    kind: "event".into(),
+                    author: item["actor"]["login"].as_str().unwrap_or_default().to_string(),
+                    avatar_url: item["actor"]["avatar_url"].as_str().map(String::from),
+                    association: None,
+                    body: item["requested_reviewer"]["login"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .to_string(),
+                    created_at: item["created_at"].as_str().unwrap_or_default().to_string(),
+                    sha: None,
+                    review_state: None,
+                    event: Some(event.to_string()),
+                });
+            }
+            _ => {}
+        }
+    }
+    timeline.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+    timeline
 }
 
 #[tauri::command]
@@ -576,70 +763,17 @@ pub async fn gh_pr_detail(
     let base = format!("/repos/{owner}/{name}");
 
     let pr = api_get(&token, &format!("{base}/pulls/{number}")).await?;
-    let issue_comments = api_get(&token, &format!("{base}/issues/{number}/comments?per_page=100"))
-        .await
-        .unwrap_or_default();
-    let reviews = api_get(&token, &format!("{base}/pulls/{number}/reviews?per_page=100"))
-        .await
-        .unwrap_or_default();
-    let inline = api_get(&token, &format!("{base}/pulls/{number}/comments?per_page=100"))
-        .await
-        .unwrap_or_default();
+    let timeline_raw = api_get(
+        &token,
+        &format!("{base}/issues/{number}/timeline?per_page=100"),
+    )
+    .await
+    .unwrap_or_default();
+    let threads = fetch_threads(&token, &owner, &name, number).await;
     let sha = pr["head"]["sha"].as_str().unwrap_or_default().to_string();
     let check_runs = api_get(&token, &format!("{base}/commits/{sha}/check-runs?per_page=100"))
         .await
         .unwrap_or_default();
-
-    let mut comments: Vec<PrComment> = Vec::new();
-    if let Some(list) = issue_comments.as_array() {
-        for c in list {
-            comments.push(PrComment {
-                author: c["user"]["login"].as_str().unwrap_or_default().to_string(),
-                avatar_url: c["user"]["avatar_url"].as_str().map(String::from),
-                body: c["body"].as_str().unwrap_or_default().to_string(),
-                created_at: c["created_at"].as_str().unwrap_or_default().to_string(),
-                path: None,
-                line: None,
-                diff_hunk: None,
-                kind: "comment".into(),
-            });
-        }
-    }
-    if let Some(list) = reviews.as_array() {
-        for r in list {
-            let review_state = r["state"].as_str().unwrap_or_default();
-            let body = r["body"].as_str().unwrap_or_default();
-            // skip empty COMMENTED shells (their substance is in inline comments)
-            if body.is_empty() && review_state == "COMMENTED" {
-                continue;
-            }
-            comments.push(PrComment {
-                author: r["user"]["login"].as_str().unwrap_or_default().to_string(),
-                avatar_url: r["user"]["avatar_url"].as_str().map(String::from),
-                body: body.to_string(),
-                created_at: r["submitted_at"].as_str().unwrap_or_default().to_string(),
-                path: None,
-                line: None,
-                diff_hunk: None,
-                kind: format!("review:{review_state}"),
-            });
-        }
-    }
-    if let Some(list) = inline.as_array() {
-        for c in list {
-            comments.push(PrComment {
-                author: c["user"]["login"].as_str().unwrap_or_default().to_string(),
-                avatar_url: c["user"]["avatar_url"].as_str().map(String::from),
-                body: c["body"].as_str().unwrap_or_default().to_string(),
-                created_at: c["created_at"].as_str().unwrap_or_default().to_string(),
-                path: c["path"].as_str().map(String::from),
-                line: c["line"].as_u64().or_else(|| c["original_line"].as_u64()),
-                diff_hunk: c["diff_hunk"].as_str().map(String::from),
-                kind: "inline".into(),
-            });
-        }
-    }
-    comments.sort_by(|a, b| a.created_at.cmp(&b.created_at));
 
     let mut checks: Vec<CheckRun> = Vec::new();
     if let Some(runs) = check_runs["check_runs"].as_array() {
@@ -671,9 +805,46 @@ pub async fn gh_pr_detail(
         deletions: pr["deletions"].as_u64().unwrap_or(0),
         commits: pr["commits"].as_u64().unwrap_or(0),
         changed_files: pr["changed_files"].as_u64().unwrap_or(0),
-        comments,
+        timeline: parse_timeline(&timeline_raw),
+        threads,
         checks,
     })
+}
+
+/// Reply inside an inline review thread (`comment_id` = thread root).
+#[tauri::command]
+pub async fn gh_pr_reply_thread(
+    state: State<'_, AppState>,
+    owner: String,
+    name: String,
+    number: u64,
+    comment_id: u64,
+    body: String,
+) -> Result<(), AppError> {
+    let token = require_token(&state)?;
+    api_post(
+        &token,
+        &format!("/repos/{owner}/{name}/pulls/{number}/comments"),
+        json!({ "body": body, "in_reply_to": comment_id }),
+    )
+    .await
+    .map(|_| ())
+}
+
+/// Resolve/unresolve a review thread (GraphQL-only operation).
+#[tauri::command]
+pub async fn gh_pr_resolve_thread(
+    state: State<'_, AppState>,
+    thread_id: String,
+    resolved: bool,
+) -> Result<(), AppError> {
+    let token = require_token(&state)?;
+    let mutation = if resolved {
+        "mutation($id: ID!) { resolveReviewThread(input: { threadId: $id }) { thread { isResolved } } }"
+    } else {
+        "mutation($id: ID!) { unresolveReviewThread(input: { threadId: $id }) { thread { isResolved } } }"
+    };
+    graphql(&token, mutation, json!({ "id": thread_id })).await.map(|_| ())
 }
 
 #[tauri::command]
