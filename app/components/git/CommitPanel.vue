@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { invoke } from '@tauri-apps/api/core'
+
 const git = useGitStore()
 const github = useGithubStore()
 
@@ -29,6 +31,27 @@ async function doCommit() {
   if (ok) {
     summary.value = ''
     description.value = ''
+  }
+}
+
+const generating = ref(false)
+const aiError = ref<string | null>(null)
+
+async function generateWithAi() {
+  if (!git.selectedRepo || !git.status?.staged.length || generating.value) return
+  generating.value = true
+  aiError.value = null
+  try {
+    const suggestion = await invoke<{ summary: string, description: string }>(
+      'ai_commit_message',
+      { repo: git.selectedRepo }
+    )
+    summary.value = suggestion.summary
+    description.value = suggestion.description
+  } catch (e) {
+    aiError.value = String(e)
+  } finally {
+    generating.value = false
   }
 }
 
@@ -178,6 +201,23 @@ function relativeDate(iso: string): string {
           size="sm"
           class="w-full"
           @keydown.meta.enter="doCommit"
+        />
+        <UButton
+          :label="generating ? 'Generating…' : 'Generate with AI'"
+          icon="i-lucide-sparkles"
+          color="neutral"
+          variant="link"
+          size="xs"
+          :loading="generating"
+          :disabled="!git.status.staged.length || generating"
+          @click="generateWithAi"
+        />
+        <UAlert
+          v-if="aiError"
+          color="error"
+          variant="soft"
+          :description="aiError"
+          class="text-xs"
         />
         <UButton
           label="Commit"

@@ -282,6 +282,20 @@ const dropOverlayStyle = computed(() => {
             class="size-3"
           />
         </div>
+
+        <!-- close pane (hover) -->
+        <button
+          class="absolute top-1 right-1.5 z-10 flex items-center justify-center size-4 rounded
+                 bg-[#1a1a1a] text-dimmed hover:text-red-400 hover:bg-[#222222]
+                 opacity-0 group-hover/pane:opacity-100 transition-opacity"
+          title="Close pane (⌘W)"
+          @click.stop="terminals.kill(pane.sessionId)"
+        >
+          <UIcon
+            name="i-lucide-x"
+            class="size-3"
+          />
+        </button>
       </div>
 
       <div
