@@ -100,6 +100,7 @@ const conflictCount = computed(() => git.status?.conflicts.length ?? 0)
           :active="git.selected?.file.path === file.path && !git.selected?.file.staged"
           @select="git.selectFile(git.selectedRepo!, file)"
           @action="git.stage(git.selectedRepo!, [file.path])"
+          @discard="git.discard(git.selectedRepo!, file)"
         />
         <p
           v-if="!git.status.unstaged.length"

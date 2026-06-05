@@ -57,6 +57,11 @@ pub fn git_branch(path: String) -> Option<String> {
     current_branch(&root)
 }
 
+#[tauri::command]
+pub fn git_repo_root(path: String) -> Option<String> {
+    repo_root(Path::new(&path)).map(|p| p.to_string_lossy().into_owned())
+}
+
 // ---------------------------------------------------------------------------
 // git CLI plumbing
 // ---------------------------------------------------------------------------
@@ -286,6 +291,24 @@ pub fn git_diff(repo: String, path: String, staged: bool, untracked: bool) -> Ap
     }
     args.extend(["--", path.as_str()]);
     run_git_str(&repo, &args, &[1])
+}
+
+/// Discards working-tree changes: `git restore` for tracked files,
+/// `git clean -f` (delete) for untracked ones. Destructive — the UI
+/// must confirm explicitly before calling this.
+#[tauri::command]
+pub fn git_discard(repo: String, tracked: Vec<String>, untracked: Vec<String>) -> AppResult<()> {
+    if !tracked.is_empty() {
+        let mut args = vec!["restore", "--"];
+        args.extend(tracked.iter().map(String::as_str));
+        run_git(&repo, &args, &[])?;
+    }
+    if !untracked.is_empty() {
+        let mut args = vec!["clean", "-f", "--"];
+        args.extend(untracked.iter().map(String::as_str));
+        run_git(&repo, &args, &[])?;
+    }
+    Ok(())
 }
 
 #[tauri::command]

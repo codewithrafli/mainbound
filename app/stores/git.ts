@@ -121,6 +121,21 @@ export const useGitStore = defineStore('git', () => {
     await refresh(repo)
   }
 
+  /** Destructive: caller must have confirmed with the user already. */
+  async function discard(repo: string, file: FileChange) {
+    const untracked = file.status === 'U'
+    await invoke('git_discard', {
+      repo,
+      tracked: untracked ? [] : [file.path],
+      untracked: untracked ? [file.path] : []
+    })
+    if (selected.value?.file.path === file.path) {
+      selected.value = null
+      diff.value = ''
+    }
+    await refresh(repo)
+  }
+
   async function commit(repo: string, summary: string, description: string) {
     committing.value = true
     try {
@@ -140,6 +155,6 @@ export const useGitStore = defineStore('git', () => {
     statusByRepo, logByRepo, selectedRepo, selected, diff, diffLoading,
     committing, error, status, log,
     changeCount, refresh, refreshAll, selectRepo, selectFile,
-    stage, stageAll, unstage, commit
+    stage, stageAll, unstage, discard, commit
   }
 })

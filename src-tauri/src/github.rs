@@ -320,6 +320,66 @@ fn parse_pr(v: &serde_json::Value) -> Pr {
     }
 }
 
+/// The open PR whose head is `branch` (same-repo heads only — forks
+/// would need a different owner prefix).
+#[tauri::command]
+pub async fn gh_pr_for_branch(owner: String, name: String, branch: String) -> AppResult<Option<Pr>> {
+    let token = require_token()?;
+    let body = api_get(
+        &token,
+        &format!("/repos/{owner}/{name}/pulls?head={owner}:{branch}&state=open"),
+    )
+    .await?;
+    Ok(body.as_array().and_then(|prs| prs.first()).map(parse_pr))
+}
+
+#[derive(Serialize, Clone, Default)]
+pub struct ReviewSummary {
+    pub approved: u64,
+    pub changes_requested: u64,
+    pub commented: u64,
+}
+
+/// Latest meaningful review state per reviewer (APPROVED /
+/// CHANGES_REQUESTED win over COMMENTED).
+#[tauri::command]
+pub async fn gh_pr_reviews(owner: String, name: String, number: u64) -> AppResult<ReviewSummary> {
+    let token = require_token()?;
+    let body = api_get(
+        &token,
+        &format!("/repos/{owner}/{name}/pulls/{number}/reviews?per_page=100"),
+    )
+    .await?;
+
+    let mut decisive: std::collections::HashMap<String, &str> = std::collections::HashMap::new();
+    let mut commenters: std::collections::HashSet<String> = std::collections::HashSet::new();
+    if let Some(reviews) = body.as_array() {
+        for review in reviews {
+            let user = review["user"]["login"].as_str().unwrap_or_default().to_string();
+            match review["state"].as_str() {
+                Some("APPROVED") => {
+                    decisive.insert(user, "approved");
+                }
+                Some("CHANGES_REQUESTED") => {
+                    decisive.insert(user, "changes");
+                }
+                Some("COMMENTED") => {
+                    commenters.insert(user);
+                }
+                _ => {}
+            }
+        }
+    }
+    Ok(ReviewSummary {
+        approved: decisive.values().filter(|s| **s == "approved").count() as u64,
+        changes_requested: decisive.values().filter(|s| **s == "changes").count() as u64,
+        commented: commenters
+            .iter()
+            .filter(|u| !decisive.contains_key(*u))
+            .count() as u64,
+    })
+}
+
 #[tauri::command]
 pub async fn gh_list_prs(owner: String, name: String) -> AppResult<Vec<Pr>> {
     let token = require_token()?;

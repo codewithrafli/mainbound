@@ -240,108 +240,113 @@ const dropOverlayStyle = computed(() => {
   <div class="flex h-full min-h-0">
     <TerminalSessionSidebar />
 
-    <div
-      ref="area"
-      class="relative flex-1 min-w-0 bg-[#0d0d0d]"
-      :class="dragging ? 'select-none' : ''"
-      @dragover="onDragOver"
-      @dragleave="onDragLeave"
-      @drop="onDrop"
-    >
+    <div class="flex flex-col flex-1 min-w-0">
+      <!-- PR Cockpit: repo state for the focused session, always visible -->
+      <TerminalCockpitBar />
+
       <div
-        v-for="pane in layout.panes"
-        :key="pane.sessionId"
-        class="absolute p-px group/pane"
-        :style="paneStyle(pane)"
-        @mousedown.capture="terminals.focusPane(pane.sessionId)"
+        ref="area"
+        class="relative flex-1 min-h-0 bg-[#0d0d0d]"
+        :class="dragging ? 'select-none' : ''"
+        @dragover="onDragOver"
+        @dragleave="onDragLeave"
+        @drop="onDrop"
       >
         <div
-          class="h-full w-full overflow-hidden rounded-sm"
-          :class="paneRing(pane)"
+          v-for="pane in layout.panes"
+          :key="pane.sessionId"
+          class="absolute p-px group/pane"
+          :style="paneStyle(pane)"
+          @mousedown.capture="terminals.focusPane(pane.sessionId)"
         >
-          <TerminalPane
-            :session-id="pane.sessionId"
-            :cwd="terminals.sessions[pane.sessionId]?.cwd ?? null"
-            @exited="terminals.closePane(pane.sessionId)"
-          />
-        </div>
+          <div
+            class="h-full w-full overflow-hidden rounded-sm"
+            :class="paneRing(pane)"
+          >
+            <TerminalPane
+              :session-id="pane.sessionId"
+              :cwd="terminals.sessions[pane.sessionId]?.cwd ?? null"
+              @exited="terminals.closePane(pane.sessionId)"
+            />
+          </div>
 
-        <!-- grab handle: drag a pane to re-dock it on another pane's edge -->
-        <div
-          draggable="true"
-          class="absolute top-0.5 left-1/2 -translate-x-1/2 z-10 flex items-center justify-center
+          <!-- grab handle: drag a pane to re-dock it on another pane's edge -->
+          <div
+            draggable="true"
+            class="absolute top-0.5 left-1/2 -translate-x-1/2 z-10 flex items-center justify-center
                  w-10 h-4 rounded-b-md cursor-grab active:cursor-grabbing
                  bg-[#1a1a1a] text-dimmed opacity-0 group-hover/pane:opacity-100 transition-opacity"
-          :class="terminals.draggingSessionId === pane.sessionId ? 'opacity-100 text-blue-400' : ''"
-          title="Drag to move pane"
-          @dragstart="onPaneDragStart(pane.sessionId, $event)"
-          @dragend="terminals.draggingSessionId = null"
+            :class="terminals.draggingSessionId === pane.sessionId ? 'opacity-100 text-blue-400' : ''"
+            title="Drag to move pane"
+            @dragstart="onPaneDragStart(pane.sessionId, $event)"
+            @dragend="terminals.draggingSessionId = null"
+          >
+            <UIcon
+              name="i-lucide-grip-horizontal"
+              class="size-3"
+            />
+          </div>
+
+          <!-- close pane (hover) -->
+          <button
+            class="absolute top-1 right-1.5 z-10 flex items-center justify-center size-4 rounded
+                 bg-[#1a1a1a] text-dimmed hover:text-red-400 hover:bg-[#222222]
+                 opacity-0 group-hover/pane:opacity-100 transition-opacity"
+            title="Close pane (⌘W)"
+            @click.stop="terminals.kill(pane.sessionId)"
+          >
+            <UIcon
+              name="i-lucide-x"
+              class="size-3"
+            />
+          </button>
+        </div>
+
+        <div
+          v-for="divider in activeDividers"
+          :key="divider.split.id"
+          class="absolute z-10 group"
+          :class="divider.split.direction === 'row' ? 'cursor-col-resize' : 'cursor-row-resize'"
+          :style="dividerStyle(divider)"
+          @mousedown="startDrag(divider, $event)"
         >
-          <UIcon
-            name="i-lucide-grip-horizontal"
-            class="size-3"
+          <div
+            class="bg-transparent group-hover:bg-blue-500/40 transition-colors"
+            :class="divider.split.direction === 'row'
+              ? 'mx-auto h-full w-px'
+              : 'my-auto w-full h-px mt-[2.5px]'"
           />
         </div>
 
-        <!-- close pane (hover) -->
-        <button
-          class="absolute top-1 right-1.5 z-10 flex items-center justify-center size-4 rounded
-                 bg-[#1a1a1a] text-dimmed hover:text-red-400 hover:bg-[#222222]
-                 opacity-0 group-hover/pane:opacity-100 transition-opacity"
-          title="Close pane (⌘W)"
-          @click.stop="terminals.kill(pane.sessionId)"
-        >
-          <UIcon
-            name="i-lucide-x"
-            class="size-3"
-          />
-        </button>
-      </div>
-
-      <div
-        v-for="divider in activeDividers"
-        :key="divider.split.id"
-        class="absolute z-10 group"
-        :class="divider.split.direction === 'row' ? 'cursor-col-resize' : 'cursor-row-resize'"
-        :style="dividerStyle(divider)"
-        @mousedown="startDrag(divider, $event)"
-      >
+        <!-- drop-zone highlight while dragging a session from the sidebar -->
         <div
-          class="bg-transparent group-hover:bg-blue-500/40 transition-colors"
-          :class="divider.split.direction === 'row'
-            ? 'mx-auto h-full w-px'
-            : 'my-auto w-full h-px mt-[2.5px]'"
+          v-if="dropTarget"
+          class="absolute z-20 pointer-events-none rounded-md border-2 border-blue-500 bg-blue-500/15 transition-all duration-75"
+          :style="dropOverlayStyle"
         />
-      </div>
 
-      <!-- drop-zone highlight while dragging a session from the sidebar -->
-      <div
-        v-if="dropTarget"
-        class="absolute z-20 pointer-events-none rounded-md border-2 border-blue-500 bg-blue-500/15 transition-all duration-75"
-        :style="dropOverlayStyle"
-      />
-
-      <div
-        v-if="!terminals.tabs.length"
-        class="absolute inset-0 flex items-center justify-center"
-      >
-        <div class="text-center space-y-2">
-          <UIcon
-            name="i-lucide-terminal"
-            class="size-8 text-dimmed"
-          />
-          <p class="text-sm text-muted">
-            No open sessions
-          </p>
-          <UButton
-            label="New Session"
-            icon="i-lucide-plus"
-            color="neutral"
-            variant="outline"
-            size="sm"
-            class="rounded-full"
-            @click="terminals.create(workspaces.active?.path ?? null, workspaces.active?.name)"
-          />
+        <div
+          v-if="!terminals.tabs.length"
+          class="absolute inset-0 flex items-center justify-center"
+        >
+          <div class="text-center space-y-2">
+            <UIcon
+              name="i-lucide-terminal"
+              class="size-8 text-dimmed"
+            />
+            <p class="text-sm text-muted">
+              No open sessions
+            </p>
+            <UButton
+              label="New Session"
+              icon="i-lucide-plus"
+              color="neutral"
+              variant="outline"
+              size="sm"
+              class="rounded-full"
+              @click="terminals.create(workspaces.active?.path ?? null, workspaces.active?.name)"
+            />
+          </div>
         </div>
       </div>
     </div>
