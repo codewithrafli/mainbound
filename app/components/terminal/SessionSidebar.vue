@@ -21,6 +21,15 @@ const repoItems = computed<DropdownMenuItem[]>(() =>
 function paneCount(tab: (typeof terminals.tabs)[number]) {
   return leavesOf(tab.root).length
 }
+
+function onDragStart(tabId: string, event: DragEvent) {
+  terminals.draggingTabId = tabId
+  if (event.dataTransfer) {
+    // WebKit requires data for the drag to start
+    event.dataTransfer.setData('text/plain', tabId)
+    event.dataTransfer.effectAllowed = 'move'
+  }
+}
 </script>
 
 <template>
@@ -87,12 +96,18 @@ function paneCount(tab: (typeof terminals.tabs)[number]) {
         :key="tab.id"
         role="button"
         tabindex="0"
+        draggable="true"
         class="group flex items-center w-full gap-2 px-2 py-1.5 rounded-md text-left text-sm cursor-pointer transition-colors"
-        :class="tab.id === terminals.activeTabId
-          ? 'bg-elevated text-highlighted'
-          : 'text-muted hover:bg-elevated/50 hover:text-toned'"
+        :class="[
+          tab.id === terminals.activeTabId
+            ? 'bg-elevated text-highlighted'
+            : 'text-muted hover:bg-elevated/50 hover:text-toned',
+          tab.id === terminals.draggingTabId ? 'opacity-50' : ''
+        ]"
         @click="terminals.setActiveTab(tab.id)"
         @keydown.enter="terminals.setActiveTab(tab.id)"
+        @dragstart="onDragStart(tab.id, $event)"
+        @dragend="terminals.draggingTabId = null"
       >
         <UIcon
           name="i-lucide-terminal"

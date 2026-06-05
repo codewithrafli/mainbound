@@ -39,12 +39,13 @@ export function leavesOf(node: PaneNode): PaneLeaf[] {
   return node.children.flatMap(leavesOf)
 }
 
-/** Replaces the leaf for `sessionId` with a split of [old leaf, new leaf]. */
-function splitLeaf(
+/** Replaces the leaf for `sessionId` with a split of it and `subtree`. */
+function insertAtLeaf(
   node: PaneNode,
   sessionId: string,
+  subtree: PaneNode,
   direction: 'row' | 'column',
-  newLeaf: PaneLeaf
+  before = false
 ): PaneNode {
   if (node.type === 'leaf') {
     if (node.sessionId !== sessionId) return node
@@ -52,13 +53,13 @@ function splitLeaf(
       type: 'split',
       id: crypto.randomUUID(),
       direction,
-      children: [node, newLeaf],
+      children: before ? [subtree, node] : [node, subtree],
       sizes: [50, 50]
     }
   }
   node.children = [
-    splitLeaf(node.children[0], sessionId, direction, newLeaf),
-    splitLeaf(node.children[1], sessionId, direction, newLeaf)
+    insertAtLeaf(node.children[0], sessionId, subtree, direction, before),
+    insertAtLeaf(node.children[1], sessionId, subtree, direction, before)
   ]
   return node
 }
@@ -82,6 +83,10 @@ export const useTerminalsStore = defineStore('terminals', () => {
   const tabs = ref<TerminalTab[]>([])
   const activeTabId = ref<string | null>(null)
   const focusedByTab = ref<Record<string, string>>({})
+  /** tab currently being dragged from the sidebar (for dock-on-drop) */
+  const draggingTabId = ref<string | null>(null)
+  /** pane currently being dragged by its grab handle */
+  const draggingSessionId = ref<string | null>(null)
 
   const activeTab = computed(() =>
     tabs.value.find(t => t.id === activeTabId.value) ?? null
@@ -140,11 +145,34 @@ export const useTerminalsStore = defineStore('terminals', () => {
     if (!tab || !focused) return
     const origin = sessions.value[focused]
     const session = newSession(origin?.cwd ?? null, origin?.title)
-    tab.root = splitLeaf(tab.root, focused, direction, {
+    tab.root = insertAtLeaf(tab.root, focused, {
       type: 'leaf',
       sessionId: session.id
-    })
+    }, direction)
     focusedByTab.value[tab.id] = session.id
+  }
+
+  /**
+   * Docks the whole pane tree of `sourceTabId` next to `targetSessionId`
+   * (drag & drop): the target leaf becomes a split of [target, source]
+   * on the chosen edge, and the source tab disappears.
+   */
+  function moveTabIntoPane(
+    sourceTabId: string,
+    targetSessionId: string,
+    zone: 'left' | 'right' | 'top' | 'bottom'
+  ) {
+    const source = tabs.value.find(t => t.id === sourceTabId)
+    const target = tabOf(targetSessionId)
+    if (!source || !target || target.id === sourceTabId) return
+    const direction = zone === 'left' || zone === 'right' ? 'row' : 'column'
+    const before = zone === 'left' || zone === 'top'
+    target.root = insertAtLeaf(target.root, targetSessionId, source.root, direction, before)
+    const idx = tabs.value.findIndex(t => t.id === sourceTabId)
+    tabs.value.splice(idx, 1)
+    focusedByTab.value = dropKeys(focusedByTab.value, [sourceTabId])
+    activeTabId.value = target.id
+    focusedByTab.value[target.id] = leavesOf(source.root)[0]!.sessionId
   }
 
   function tabOf(sessionId: string): TerminalTab | null {
@@ -155,6 +183,45 @@ export const useTerminalsStore = defineStore('terminals', () => {
 
   function dropKeys<T>(obj: Record<string, T>, keys: string[]): Record<string, T> {
     return Object.fromEntries(Object.entries(obj).filter(([k]) => !keys.includes(k)))
+  }
+
+  /**
+   * Re-docks a single pane next to `targetSessionId` (drag & drop within
+   * or across tabs): the pane is unhooked from its tree and the target
+   * leaf becomes a split of [target, pane] on the chosen edge.
+   */
+  function movePaneIntoPane(
+    sourceSessionId: string,
+    targetSessionId: string,
+    zone: 'left' | 'right' | 'top' | 'bottom'
+  ) {
+    if (sourceSessionId === targetSessionId) return
+    const sourceTab = tabOf(sourceSessionId)
+    const targetTab = tabOf(targetSessionId)
+    if (!sourceTab || !targetTab) return
+
+    const remaining = removeLeaf(sourceTab.root, sourceSessionId)
+    if (remaining) {
+      sourceTab.root = remaining
+      if (focusedByTab.value[sourceTab.id] === sourceSessionId) {
+        focusedByTab.value[sourceTab.id] = leavesOf(remaining)[0]!.sessionId
+      }
+    } else {
+      // source tab is now empty — it can only be a different tab,
+      // because same-tab moves always leave the target leaf behind
+      const idx = tabs.value.findIndex(t => t.id === sourceTab.id)
+      tabs.value.splice(idx, 1)
+      focusedByTab.value = dropKeys(focusedByTab.value, [sourceTab.id])
+    }
+
+    const direction = zone === 'left' || zone === 'right' ? 'row' : 'column'
+    const before = zone === 'left' || zone === 'top'
+    targetTab.root = insertAtLeaf(targetTab.root, targetSessionId, {
+      type: 'leaf',
+      sessionId: sourceSessionId
+    }, direction, before)
+    activeTabId.value = targetTab.id
+    focusedByTab.value[targetTab.id] = sourceSessionId
   }
 
   /** Tree surgery after a pane's PTY is gone (exited or killed). */
@@ -211,8 +278,9 @@ export const useTerminalsStore = defineStore('terminals', () => {
   }
 
   return {
-    sessions, tabs, activeTabId, focusedByTab,
+    sessions, tabs, activeTabId, focusedByTab, draggingTabId, draggingSessionId,
     activeTab, focusedSessionId, paneCount,
-    create, split, closePane, kill, killTab, setActiveTab, focusPane
+    create, split, moveTabIntoPane, movePaneIntoPane,
+    closePane, kill, killTab, setActiveTab, focusPane
   }
 })
