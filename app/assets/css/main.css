@@ -1,0 +1,32 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+@import "@xterm/xterm/css/xterm.css";
+
+/* Dark, dense theme matching the reference design */
+.dark {
+  --ui-bg: #0d0d0d;
+  --ui-bg-muted: #131313;
+  --ui-bg-elevated: #1a1a1a;
+  --ui-bg-accented: #232323;
+  --ui-border: #1f1f1f;
+  --ui-border-muted: #1a1a1a;
+  --ui-border-accented: #2a2a2a;
+  --ui-text-dimmed: #555555;
+  --ui-text-muted: #888888;
+  --ui-text-toned: #aaaaaa;
+  --ui-text: #cccccc;
+  --ui-text-highlighted: #f0f0f0;
+  --ui-radius: 0.375rem;
+}
+
+html, body, #__nuxt {
+  height: 100%;
+  overflow: hidden;
+  background: var(--ui-bg);
+}
+
+/* xterm fills its pane; padding keeps text off the edges */
+.xterm {
+  height: 100%;
+  padding: 8px 10px;
+}
