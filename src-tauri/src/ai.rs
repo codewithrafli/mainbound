@@ -29,10 +29,12 @@ fn run_git(repo: &str, args: &[&str]) -> AppResult<String> {
 }
 
 /// Runs the user's `claude` CLI with the prompt on stdin. Spawned via a
-/// login shell so the CLI is found on the user's PATH.
-fn run_claude(prompt: &str) -> AppResult<String> {
+/// login shell so the CLI is found on the user's PATH; cwd is the repo
+/// so the model sees project context.
+fn run_claude(repo: &str, prompt: &str) -> AppResult<String> {
     let mut child = Command::new("/bin/zsh")
         .args(["-lc", "claude -p --model haiku --output-format text"])
+        .current_dir(repo)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -97,7 +99,7 @@ pub async fn ai_commit_message(repo: String) -> AppResult<CommitSuggestion> {
              File stats:\n{stat}\n\nDiff (may be truncated):\n{diff}"
         );
 
-        let raw = run_claude(&prompt)?;
+        let raw = run_claude(&repo, &prompt)?;
         let json = extract_json(&raw)
             .ok_or_else(|| AppError::Pty(format!("unexpected AI output: {}", raw.trim())))?;
         let summary = json["summary"].as_str().unwrap_or_default().trim().to_string();
