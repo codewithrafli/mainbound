@@ -5,14 +5,10 @@ const workspaces = useWorkspacesStore()
 // Restore workspaces, then open a first session in the active one
 onMounted(async () => {
   await workspaces.init()
-  if (!terminals.sessions.length) {
+  if (!terminals.tabs.length) {
     terminals.create(workspaces.active?.path ?? null, workspaces.active?.name)
   }
 })
-
-function onExited(id: string) {
-  terminals.remove(id)
-}
 </script>
 
 <template>
@@ -20,23 +16,24 @@ function onExited(id: string) {
     <TerminalSessionSidebar />
 
     <div class="relative flex-1 min-w-0 bg-[#0d0d0d]">
-      <!-- Panes stay mounted (v-show) so scrollback survives switching -->
-      <TerminalPane
-        v-for="session in terminals.sessions"
-        v-show="session.id === terminals.activeId"
-        :key="session.id"
-        :session-id="session.id"
-        :cwd="session.cwd"
+      <!-- All tabs stay mounted (v-show) so PTYs + scrollback survive switching -->
+      <TerminalTabView
+        v-for="tab in terminals.tabs"
+        v-show="tab.id === terminals.activeTabId"
+        :key="tab.id"
+        :tab="tab"
         class="absolute inset-0"
-        @exited="onExited(session.id)"
       />
 
       <div
-        v-if="!terminals.sessions.length"
+        v-if="!terminals.tabs.length"
         class="absolute inset-0 flex items-center justify-center"
       >
         <div class="text-center space-y-2">
-          <UIcon name="i-lucide-terminal" class="size-8 text-dimmed" />
+          <UIcon
+            name="i-lucide-terminal"
+            class="size-8 text-dimmed"
+          />
           <p class="text-sm text-muted">
             No open sessions
           </p>
@@ -47,7 +44,7 @@ function onExited(id: string) {
             variant="outline"
             size="sm"
             class="rounded-full"
-            @click="terminals.create()"
+            @click="terminals.create(workspaces.active?.path ?? null, workspaces.active?.name)"
           />
         </div>
       </div>

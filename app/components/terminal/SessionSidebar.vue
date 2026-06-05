@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { DropdownMenuItem } from '@nuxt/ui'
+import { leavesOf } from '~/stores/terminals'
 
 const terminals = useTerminalsStore()
 const workspaces = useWorkspacesStore()
@@ -16,6 +17,10 @@ const repoItems = computed<DropdownMenuItem[]>(() =>
     onSelect: () => terminals.create(repo.path, repo.name)
   }))
 )
+
+function paneCount(tab: (typeof terminals.tabs)[number]) {
+  return leavesOf(tab.root).length
+}
 </script>
 
 <template>
@@ -48,32 +53,68 @@ const repoItems = computed<DropdownMenuItem[]>(() =>
       </UDropdownMenu>
     </div>
 
-    <div class="px-3 pt-2 pb-1 text-[10px] font-medium tracking-wider text-dimmed uppercase">
-      Sessions
+    <div class="flex items-center px-3 pt-2 pb-1">
+      <span class="text-[10px] font-medium tracking-wider text-dimmed uppercase">Sessions</span>
+      <span class="ml-auto flex items-center">
+        <UTooltip text="Split right (⌘D)">
+          <UButton
+            icon="i-lucide-columns-2"
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            aria-label="Split right"
+            :disabled="!terminals.focusedSessionId"
+            @click="terminals.split('row')"
+          />
+        </UTooltip>
+        <UTooltip text="Split down (⇧⌘D)">
+          <UButton
+            icon="i-lucide-rows-2"
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            aria-label="Split down"
+            :disabled="!terminals.focusedSessionId"
+            @click="terminals.split('column')"
+          />
+        </UTooltip>
+      </span>
     </div>
 
     <nav class="flex-1 overflow-y-auto px-2 space-y-0.5">
       <div
-        v-for="session in terminals.sessions"
-        :key="session.id"
+        v-for="tab in terminals.tabs"
+        :key="tab.id"
         role="button"
         tabindex="0"
         class="group flex items-center w-full gap-2 px-2 py-1.5 rounded-md text-left text-sm cursor-pointer transition-colors"
-        :class="session.id === terminals.activeId
+        :class="tab.id === terminals.activeTabId
           ? 'bg-elevated text-highlighted'
           : 'text-muted hover:bg-elevated/50 hover:text-toned'"
-        @click="terminals.setActive(session.id)"
-        @keydown.enter="terminals.setActive(session.id)"
+        @click="terminals.setActiveTab(tab.id)"
+        @keydown.enter="terminals.setActiveTab(tab.id)"
       >
-        <UIcon name="i-lucide-terminal" class="size-3.5 shrink-0" />
+        <UIcon
+          name="i-lucide-terminal"
+          class="size-3.5 shrink-0"
+        />
         <span class="flex-1 min-w-0">
-          <span class="block truncate leading-tight">{{ session.title }}</span>
+          <span class="block truncate leading-tight">
+            {{ tab.title }}
+            <span
+              v-if="paneCount(tab) > 1"
+              class="text-[10px] text-dimmed"
+            >· {{ paneCount(tab) }} panes</span>
+          </span>
           <span
-            v-if="session.branch"
+            v-if="tab.branch"
             class="flex items-center gap-1 text-[11px] text-dimmed leading-tight"
           >
-            <UIcon name="i-lucide-git-branch" class="size-3" />
-            <span class="truncate">{{ session.branch }}</span>
+            <UIcon
+              name="i-lucide-git-branch"
+              class="size-3"
+            />
+            <span class="truncate">{{ tab.branch }}</span>
           </span>
         </span>
         <UButton
@@ -83,11 +124,14 @@ const repoItems = computed<DropdownMenuItem[]>(() =>
           size="xs"
           class="opacity-0 group-hover:opacity-100 -mr-1"
           aria-label="Close session"
-          @click.stop="terminals.kill(session.id)"
+          @click.stop="terminals.killTab(tab.id)"
         />
       </div>
 
-      <p v-if="!terminals.sessions.length" class="px-2 py-4 text-xs text-dimmed italic">
+      <p
+        v-if="!terminals.tabs.length"
+        class="px-2 py-4 text-xs text-dimmed italic"
+      >
         No sessions yet.
       </p>
     </nav>

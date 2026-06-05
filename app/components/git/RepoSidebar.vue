@@ -15,12 +15,24 @@ const conflictCount = computed(() => git.status?.conflicts.length ?? 0)
       class="flex items-center gap-1.5 px-3 pt-3 pb-1.5 text-[10px] font-medium tracking-wider text-dimmed uppercase hover:text-muted"
       @click="reposOpen = !reposOpen"
     >
-      <UIcon :name="reposOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'" class="size-3" />
+      <UIcon
+        :name="reposOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+        class="size-3"
+      />
       Repositories
-      <UBadge color="neutral" variant="soft" size="sm">{{ workspaces.repos.length }}</UBadge>
+      <UBadge
+        color="neutral"
+        variant="soft"
+        size="sm"
+      >
+        {{ workspaces.repos.length }}
+      </UBadge>
     </button>
 
-    <nav v-show="reposOpen" class="px-2 space-y-0.5">
+    <nav
+      v-show="reposOpen"
+      class="px-2 space-y-0.5"
+    >
       <button
         v-for="repo in workspaces.repos"
         :key="repo.path"
@@ -30,9 +42,15 @@ const conflictCount = computed(() => git.status?.conflicts.length ?? 0)
           : 'text-muted hover:bg-elevated/50 hover:text-toned'"
         @click="git.selectRepo(repo.path)"
       >
-        <UIcon name="i-lucide-folder-git-2" class="size-3.5 shrink-0 text-blue-400" />
+        <UIcon
+          name="i-lucide-folder-git-2"
+          class="size-3.5 shrink-0 text-blue-400"
+        />
         <span class="flex-1 truncate font-medium">{{ repo.name }}</span>
-        <span v-if="repo.branch" class="truncate max-w-24 text-[10px] text-dimmed">{{ repo.branch }}</span>
+        <span
+          v-if="repo.branch"
+          class="truncate max-w-24 text-[10px] text-dimmed"
+        >{{ repo.branch }}</span>
         <UBadge
           v-if="git.changeCount(repo.path)"
           color="neutral"
@@ -43,7 +61,10 @@ const conflictCount = computed(() => git.status?.conflicts.length ?? 0)
         </UBadge>
       </button>
 
-      <p v-if="!workspaces.repos.length" class="px-2 py-3 text-xs text-dimmed italic">
+      <p
+        v-if="!workspaces.repos.length"
+        class="px-2 py-3 text-xs text-dimmed italic"
+      >
         No repositories found in this workspace.
       </p>
     </nav>
@@ -53,14 +74,24 @@ const conflictCount = computed(() => git.status?.conflicts.length ?? 0)
       class="flex items-center gap-1.5 px-3 pt-4 pb-1.5 text-[10px] font-medium tracking-wider text-dimmed uppercase hover:text-muted"
       @click="changesOpen = !changesOpen"
     >
-      <UIcon :name="changesOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'" class="size-3" />
+      <UIcon
+        :name="changesOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+        class="size-3"
+      />
       Changes
-      <UBadge color="neutral" variant="soft" size="sm">
+      <UBadge
+        color="neutral"
+        variant="soft"
+        size="sm"
+      >
         {{ (git.status?.unstaged.length ?? 0) + (git.status?.staged.length ?? 0) }}
       </UBadge>
     </button>
 
-    <div v-show="changesOpen" class="flex-1 px-2 space-y-0.5">
+    <div
+      v-show="changesOpen"
+      class="flex-1 px-2 space-y-0.5"
+    >
       <template v-if="git.status">
         <GitChangeRow
           v-for="file in git.status.unstaged"
@@ -70,11 +101,17 @@ const conflictCount = computed(() => git.status?.conflicts.length ?? 0)
           @select="git.selectFile(git.selectedRepo!, file)"
           @action="git.stage(git.selectedRepo!, [file.path])"
         />
-        <p v-if="!git.status.unstaged.length" class="px-2 py-2 text-xs text-dimmed italic">
+        <p
+          v-if="!git.status.unstaged.length"
+          class="px-2 py-2 text-xs text-dimmed italic"
+        >
           No unstaged changes.
         </p>
       </template>
-      <p v-else class="px-2 py-2 text-xs text-dimmed italic">
+      <p
+        v-else
+        class="px-2 py-2 text-xs text-dimmed italic"
+      >
         Select a repository above.
       </p>
     </div>
@@ -82,13 +119,23 @@ const conflictCount = computed(() => git.status?.conflicts.length ?? 0)
     <!-- CONFLICTS -->
     <div class="mt-auto border-t border-default px-3 py-2.5">
       <div class="flex items-center gap-1.5 text-[10px] font-medium tracking-wider text-dimmed uppercase">
-        <UIcon name="i-lucide-git-merge" class="size-3" />
+        <UIcon
+          name="i-lucide-git-merge"
+          class="size-3"
+        />
         Conflicts
-        <UBadge :color="conflictCount ? 'warning' : 'neutral'" variant="soft" size="sm">
+        <UBadge
+          :color="conflictCount ? 'warning' : 'neutral'"
+          variant="soft"
+          size="sm"
+        >
           {{ conflictCount }}
         </UBadge>
       </div>
-      <p v-if="!conflictCount" class="pt-1.5 text-xs text-dimmed">
+      <p
+        v-if="!conflictCount"
+        class="pt-1.5 text-xs text-dimmed"
+      >
         No merge in progress.
       </p>
     </div>

@@ -14,6 +14,18 @@ watch(() => ui.view, async (view) => {
   }
   git.refreshAll(repoPaths)
 })
+
+// …and when the app window regains focus (files often change in between)
+let unlistenFocus: (() => void) | undefined
+onMounted(async () => {
+  const { getCurrentWindow } = await import('@tauri-apps/api/window')
+  unlistenFocus = await getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+    if (focused && ui.view === 'changes' && git.selectedRepo) {
+      git.refresh(git.selectedRepo)
+    }
+  })
+})
+onBeforeUnmount(() => unlistenFocus?.())
 </script>
 
 <template>

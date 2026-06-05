@@ -1,64 +1,46 @@
-# Nuxt Starter Template
+# tide
 
-[![Nuxt UI](https://img.shields.io/badge/Made%20with-Nuxt%20UI-00DC82?logo=nuxt&labelColor=020420)](https://ui.nuxt.com)
+A macOS terminal workspace for parallel coding sessions — inspired by [cmux](https://github.com/manaflow-ai/cmux), built with **Tauri 2 + Nuxt 4 + Nuxt UI**.
 
-Use this template to get started with [Nuxt UI](https://ui.nuxt.com) quickly.
+## Features
 
-- [Live demo](https://starter-template.nuxt.dev/)
-- [Documentation](https://ui.nuxt.com/docs/getting-started/installation/nuxt)
+- **Terminal** — real PTY sessions (zsh) rendered with xterm.js (WebGL), multiple sessions per workspace, recursive split panes (right/down) with draggable dividers, sessions survive view switches with full scrollback
+- **Workspaces** — add a folder, tide discovers every git repo inside it and shows branches
+- **File Changes** — git status with M/U/A/D badges and ±line counts, syntax-highlighted diffs, stage/unstage, commit with summary + description, history, conflict detection
+- **GitHub** — push/pull (via your local git credentials), open PR list with CI status, create PRs. Auth via PAT or OAuth device flow; token stored in the macOS Keychain and never exposed to the UI layer
 
-<a href="https://starter-template.nuxt.dev/" target="_blank">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://ui.nuxt.com/assets/templates/nuxt/starter-dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="https://ui.nuxt.com/assets/templates/nuxt/starter-light.png">
-    <img alt="Nuxt Starter Template" src="https://ui.nuxt.com/assets/templates/nuxt/starter-light.png" width="830" height="466">
-  </picture>
-</a>
-
-> The starter template for Vue is on https://github.com/nuxt-ui-templates/starter-vue.
-
-## Quick Start
-
-```bash [Terminal]
-npm create nuxt@latest -- -t ui
-```
-
-## Deploy your own
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-name=starter&repository-url=https%3A%2F%2Fgithub.com%2Fnuxt-ui-templates%2Fstarter&demo-image=https%3A%2F%2Fui.nuxt.com%2Fassets%2Ftemplates%2Fnuxt%2Fstarter-dark.png&demo-url=https%3A%2F%2Fstarter-template.nuxt.dev%2F&demo-title=Nuxt%20Starter%20Template&demo-description=A%20minimal%20template%20to%20get%20started%20with%20Nuxt%20UI.)
-
-## Setup
-
-Make sure to install the dependencies:
+## Development
 
 ```bash
-pnpm install
+npm install
+npm run tauri dev
 ```
 
-## Development Server
+Requires Rust (`rustup`), Node 20+, and `git` on PATH.
 
-Start the development server on `http://localhost:3000`:
+> Note: `src-tauri/.cargo/config.toml` redirects build artifacts to a local
+> disk path (`~/.cache/cargo-target/tide`) — adjust or delete it on other machines.
+
+## Build
 
 ```bash
-pnpm dev
+npm run tauri build   # produces .app + .dmg under the cargo target dir
 ```
 
-## Production
+## Keyboard shortcuts
 
-Build the application for production:
+| Shortcut | Action |
+| --- | --- |
+| ⌘T | New terminal session |
+| ⌘D / ⇧⌘D | Split pane right / down |
+| ⌘W | Close focused pane |
+| ⌘1 / ⌘2 | Terminal / File Changes view |
+| ⌘↵ | Commit (when in the commit form) |
 
-```bash
-pnpm build
-```
+## Architecture
 
-Locally preview production build:
-
-```bash
-pnpm preview
-```
-
-Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
-
-## Renovate integration
-
-Install [Renovate GitHub app](https://github.com/apps/renovate/installations/select_target) on your repository and you are good to go.
+- `src-tauri/src/pty.rs` — portable-pty sessions; output streamed per session via `pty://data/{id}` events
+- `src-tauri/src/git.rs` — shells out to `git` (porcelain v2), no libgit2
+- `src-tauri/src/github.rs` — GitHub REST via reqwest; token in Keychain (`keyring`)
+- `src-tauri/src/workspace.rs` / `store.rs` — repo discovery + JSON persistence in app data dir
+- `app/` — Nuxt 4 SPA (`ssr: false`), Pinia stores (`terminals`, `workspaces`, `git`, `github`, `ui`)

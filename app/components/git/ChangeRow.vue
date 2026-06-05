@@ -24,12 +24,21 @@ defineEmits<{
     @keydown.enter="$emit('select')"
   >
     <GitStatusBadge :status="file.status" />
-    <span class="flex-1 truncate" :title="file.path">
+    <span
+      class="flex-1 truncate"
+      :title="file.path"
+    >
       {{ file.path.split('/').pop() }}
       <span class="text-dimmed text-[10px] ml-0.5">{{ file.path.includes('/') ? file.path.slice(0, file.path.lastIndexOf('/')) : '' }}</span>
     </span>
-    <span v-if="file.added !== null" class="text-[10px] font-mono text-green-500">+{{ file.added }}</span>
-    <span v-if="file.removed !== null && file.removed > 0" class="text-[10px] font-mono text-red-500">-{{ file.removed }}</span>
+    <span
+      v-if="file.added !== null"
+      class="text-[10px] font-mono text-green-500"
+    >+{{ file.added }}</span>
+    <span
+      v-if="file.removed !== null && file.removed > 0"
+      class="text-[10px] font-mono text-red-500"
+    >-{{ file.removed }}</span>
     <UButton
       :icon="file.staged ? 'i-lucide-minus' : 'i-lucide-plus'"
       color="neutral"

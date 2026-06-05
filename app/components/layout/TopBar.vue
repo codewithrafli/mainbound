@@ -31,14 +31,8 @@ const viewTabs: TabsItem[] = [
     </div>
 
     <!-- right: actions -->
-    <div class="ml-auto flex items-center gap-1">
-      <UButton
-        icon="i-lucide-settings"
-        color="neutral"
-        variant="ghost"
-        size="xs"
-        aria-label="Settings"
-      />
+    <div class="ml-auto flex items-center gap-1.5">
+      <GithubMenu />
     </div>
   </header>
 </template>

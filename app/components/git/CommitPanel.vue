@@ -1,5 +1,16 @@
 <script setup lang="ts">
 const git = useGitStore()
+const github = useGithubStore()
+
+async function doPush() {
+  if (!git.selectedRepo) return
+  if (await github.push(git.selectedRepo)) git.refresh(git.selectedRepo)
+}
+
+async function doPull() {
+  if (!git.selectedRepo) return
+  if (await github.pull(git.selectedRepo)) git.refresh(git.selectedRepo)
+}
 
 const summary = ref('')
 const description = ref('')
@@ -36,18 +47,53 @@ function relativeDate(iso: string): string {
     <template v-if="git.status">
       <!-- branch header -->
       <div class="flex items-center gap-2 px-3 py-2.5 border-b border-default">
-        <UIcon name="i-lucide-git-branch" class="size-3.5 text-muted" />
-        <span class="text-sm font-medium text-highlighted truncate">{{ git.status.branch ?? 'detached' }}</span>
-        <span v-if="git.status.oid" class="text-[10px] font-mono text-dimmed">{{ git.status.oid }}</span>
-        <UButton
-          icon="i-lucide-refresh-cw"
-          color="neutral"
-          variant="ghost"
-          size="xs"
-          class="ml-auto"
-          aria-label="Refresh"
-          @click="git.refresh(git.selectedRepo!)"
+        <UIcon
+          name="i-lucide-git-branch"
+          class="size-3.5 text-muted"
         />
+        <span class="text-sm font-medium text-highlighted truncate">{{ git.status.branch ?? 'detached' }}</span>
+        <span
+          v-if="git.status.oid"
+          class="text-[10px] font-mono text-dimmed"
+        >{{ git.status.oid }}</span>
+        <span
+          v-if="git.status.ahead"
+          class="text-[10px] font-mono text-green-500"
+          title="Commits ahead of upstream"
+        >↑{{ git.status.ahead }}</span>
+        <span
+          v-if="git.status.behind"
+          class="text-[10px] font-mono text-amber-400"
+          title="Commits behind upstream"
+        >↓{{ git.status.behind }}</span>
+        <span class="ml-auto flex items-center">
+          <UButton
+            icon="i-lucide-arrow-down-to-line"
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            aria-label="Pull"
+            :loading="github.syncing === 'pull'"
+            @click="doPull"
+          />
+          <UButton
+            icon="i-lucide-arrow-up-from-line"
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            aria-label="Push"
+            :loading="github.syncing === 'push'"
+            @click="doPush"
+          />
+          <UButton
+            icon="i-lucide-refresh-cw"
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            aria-label="Refresh"
+            @click="git.refresh(git.selectedRepo!)"
+          />
+        </span>
       </div>
 
       <!-- STAGED -->
@@ -55,9 +101,18 @@ function relativeDate(iso: string): string {
         class="flex items-center gap-1.5 px-3 pt-3 pb-1.5 text-[10px] font-medium tracking-wider text-dimmed uppercase hover:text-muted"
         @click="stagedOpen = !stagedOpen"
       >
-        <UIcon :name="stagedOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'" class="size-3" />
+        <UIcon
+          :name="stagedOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+          class="size-3"
+        />
         Staged
-        <UBadge color="neutral" variant="soft" size="sm">{{ git.status.staged.length }}</UBadge>
+        <UBadge
+          color="neutral"
+          variant="soft"
+          size="sm"
+        >
+          {{ git.status.staged.length }}
+        </UBadge>
         <UButton
           label="Stage all"
           color="neutral"
@@ -69,7 +124,10 @@ function relativeDate(iso: string): string {
         />
       </button>
 
-      <div v-show="stagedOpen" class="px-2 space-y-0.5">
+      <div
+        v-show="stagedOpen"
+        class="px-2 space-y-0.5"
+      >
         <GitChangeRow
           v-for="file in git.status.staged"
           :key="`s-${file.path}`"
@@ -78,7 +136,10 @@ function relativeDate(iso: string): string {
           @select="git.selectFile(git.selectedRepo!, file)"
           @action="git.unstage(git.selectedRepo!, [file.path])"
         />
-        <p v-if="!git.status.staged.length" class="px-2 py-2 text-[11px] text-dimmed italic">
+        <p
+          v-if="!git.status.staged.length"
+          class="px-2 py-2 text-[11px] text-dimmed italic"
+        >
           Nothing staged yet — use the Changes list on the left or "Stage all" above.
         </p>
       </div>
@@ -88,12 +149,21 @@ function relativeDate(iso: string): string {
         class="flex items-center gap-1.5 px-3 pt-4 pb-1.5 text-[10px] font-medium tracking-wider text-dimmed uppercase hover:text-muted"
         @click="commitOpen = !commitOpen"
       >
-        <UIcon :name="commitOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'" class="size-3" />
-        <UIcon name="i-lucide-git-commit-horizontal" class="size-3" />
+        <UIcon
+          :name="commitOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+          class="size-3"
+        />
+        <UIcon
+          name="i-lucide-git-commit-horizontal"
+          class="size-3"
+        />
         Commit
       </button>
 
-      <div v-show="commitOpen" class="px-3 space-y-2">
+      <div
+        v-show="commitOpen"
+        class="px-3 space-y-2"
+      >
         <UInput
           v-model="summary"
           placeholder="Summary (required)"
@@ -118,7 +188,9 @@ function relativeDate(iso: string): string {
           :disabled="!canCommit"
           @click="doCommit"
         />
-        <p class="text-[10px] text-dimmed text-center">⌘↵ to commit</p>
+        <p class="text-[10px] text-dimmed text-center">
+          ⌘↵ to commit
+        </p>
         <UAlert
           v-if="git.error"
           color="error"
@@ -133,28 +205,55 @@ function relativeDate(iso: string): string {
         class="flex items-center gap-1.5 px-3 pt-4 pb-1.5 text-[10px] font-medium tracking-wider text-dimmed uppercase hover:text-muted"
         @click="historyOpen = !historyOpen"
       >
-        <UIcon :name="historyOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'" class="size-3" />
+        <UIcon
+          :name="historyOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+          class="size-3"
+        />
         History
-        <UBadge color="neutral" variant="soft" size="sm">{{ git.log.length }}</UBadge>
+        <UBadge
+          color="neutral"
+          variant="soft"
+          size="sm"
+        >
+          {{ git.log.length }}
+        </UBadge>
       </button>
 
-      <div v-show="historyOpen" class="px-3 pb-3 space-y-2.5">
-        <div v-for="commit in git.log" :key="commit.hash" class="flex gap-2">
+      <div
+        v-show="historyOpen"
+        class="px-3 pb-3 space-y-2.5"
+      >
+        <div
+          v-for="commit in git.log"
+          :key="commit.hash"
+          class="flex gap-2"
+        >
           <span class="mt-1 size-1.5 shrink-0 rounded-full bg-blue-500" />
           <div class="min-w-0">
-            <p class="text-[12px] text-toned truncate leading-tight">{{ commit.subject }}</p>
+            <p class="text-[12px] text-toned truncate leading-tight">
+              {{ commit.subject }}
+            </p>
             <p class="text-[10px] text-dimmed font-mono leading-tight pt-0.5">
               {{ commit.short_hash }} · {{ commit.author }} · {{ relativeDate(commit.date) }}
             </p>
           </div>
         </div>
-        <p v-if="!git.log.length" class="text-[11px] text-dimmed italic">
+        <p
+          v-if="!git.log.length"
+          class="text-[11px] text-dimmed italic"
+        >
           No commits yet.
         </p>
       </div>
+
+      <!-- PULL REQUESTS -->
+      <GithubPrSection />
     </template>
 
-    <div v-else class="flex flex-1 items-center justify-center p-6">
+    <div
+      v-else
+      class="flex flex-1 items-center justify-center p-6"
+    >
       <p class="text-xs text-dimmed text-center">
         Select a repository to stage and commit changes.
       </p>
