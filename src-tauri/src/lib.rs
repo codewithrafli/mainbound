@@ -94,6 +94,7 @@ pub fn run() {
     .manage(AppState::new())
     .invoke_handler(tauri::generate_handler![
       ai::ai_commit_message,
+      ai::ai_pr_message,
       pty::pty_spawn,
       pty::pty_write,
       pty::pty_resize,
