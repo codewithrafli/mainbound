@@ -11,7 +11,8 @@
     "typecheck": "nuxt typecheck",
     "generate": "nuxt generate",
     "tauri": "tauri",
-    "release": "bash scripts/release.sh"
+    "release": "bash scripts/release.sh",
+    "demo": "bash scripts/record-demo.sh"
   },
   "dependencies": {
     "@git-diff-view/vue": "^0.1.5",
@@ -48,5 +49,5 @@
     "unrs-resolver"
   ],
   "packageManager": "bun@1.2.18",
-  "version": "0.2.1"
+  "version": "0.2.2"
 }
