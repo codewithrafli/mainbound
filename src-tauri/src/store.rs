@@ -12,6 +12,10 @@ pub struct Workspace {
     pub path: String,
 }
 
+fn default_zoom() -> f64 {
+    1.0
+}
+
 #[derive(Serialize, Deserialize, Default, Clone)]
 pub struct PersistedState {
     #[serde(default)]
@@ -23,6 +27,12 @@ pub struct PersistedState {
     pub gh_accounts: Vec<String>,
     #[serde(default)]
     pub gh_active: Option<String>,
+    /// webview zoom factor (⌘+/⌘-/⌘0)
+    #[serde(default = "default_zoom")]
+    pub zoom: f64,
+    /// frontend-owned session layout snapshot (tabs, splits, cwds)
+    #[serde(default)]
+    pub sessions: serde_json::Value,
 }
 
 fn state_file() -> PathBuf {

@@ -112,6 +112,10 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
           if let Some(window) = app.get_webview_window("main") {
             let _ = window.set_zoom(*zoom);
           }
+          // persist across restarts
+          let mut persisted = state.store.lock();
+          persisted.zoom = *zoom;
+          let _ = store::save(&persisted);
         }
       }
       _ => {
@@ -128,6 +132,7 @@ pub fn run() {
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_notification::init())
+    .plugin(tauri_plugin_window_state::Builder::default().build())
     .manage(AppState::new())
     .invoke_handler(tauri::generate_handler![
       ai::ai_commit_message,
@@ -171,9 +176,22 @@ pub fn run() {
       workspace::workspace_remove,
       workspace::workspace_set_last,
       workspace::repo_scan,
+      workspace::sessions_save,
+      workspace::sessions_load,
     ])
     .setup(|app| {
       build_menu(app.handle())?;
+      // re-apply persisted zoom
+      {
+        use tauri::Manager;
+        let state = app.state::<AppState>();
+        let zoom = *state.zoom.lock();
+        if (zoom - 1.0).abs() > f64::EPSILON {
+          if let Some(window) = app.get_webview_window("main") {
+            let _ = window.set_zoom(zoom);
+          }
+        }
+      }
       if cfg!(debug_assertions) {
         app.handle().plugin(
           tauri_plugin_log::Builder::default()

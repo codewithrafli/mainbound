@@ -29,6 +29,15 @@ export interface TerminalTab {
   root: PaneNode
 }
 
+export type SavedNode
+  = | { type: 'leaf', cwd: string | null, title: string }
+    | { type: 'split', direction: 'row' | 'column', sizes: [number, number], children: [SavedNode, SavedNode] }
+
+export interface SavedTab {
+  title: string
+  root: SavedNode
+}
+
 function basename(path: string | null): string | null {
   if (!path) return null
   return path.split('/').filter(Boolean).pop() ?? null
@@ -270,6 +279,66 @@ export const useTerminalsStore = defineStore('terminals', () => {
     activeTabId.value = id
   }
 
+  // --- session restore ------------------------------------------------------
+
+  function serializeNode(node: PaneNode): SavedNode {
+    if (node.type === 'leaf') {
+      const session = sessions.value[node.sessionId]
+      return { type: 'leaf', cwd: session?.cwd ?? null, title: session?.title ?? 'zsh' }
+    }
+    return {
+      type: 'split',
+      direction: node.direction,
+      sizes: node.sizes,
+      children: [serializeNode(node.children[0]), serializeNode(node.children[1])]
+    }
+  }
+
+  /** Layout snapshot (cwds + split tree), safe to persist. */
+  function serialize(): SavedTab[] {
+    return tabs.value.map(tab => ({ title: tab.title, root: serializeNode(tab.root) }))
+  }
+
+  function restoreNode(node: SavedNode): PaneNode {
+    if (node.type === 'leaf') {
+      const session = newSession(node.cwd, node.title)
+      return { type: 'leaf', sessionId: session.id }
+    }
+    return {
+      type: 'split',
+      id: crypto.randomUUID(),
+      direction: node.direction,
+      sizes: node.sizes,
+      children: [restoreNode(node.children[0]), restoreNode(node.children[1])]
+    }
+  }
+
+  /** Rebuilds tabs from a snapshot — fresh PTYs spawn per pane on mount. */
+  function restore(saved: SavedTab[]) {
+    for (const savedTab of saved) {
+      const root = restoreNode(savedTab.root)
+      const tab: TerminalTab = {
+        id: crypto.randomUUID(),
+        title: savedTab.title,
+        branch: null,
+        root
+      }
+      tabs.value.push(tab)
+      const firstLeaf = leavesOf(root)[0]!
+      focusedByTab.value[tab.id] = firstLeaf.sessionId
+      const cwd = sessions.value[firstLeaf.sessionId]?.cwd
+      if (cwd) {
+        const reactiveTab = tabs.value[tabs.value.length - 1]!
+        invoke<string | null>('git_branch', { path: cwd })
+          .then((branch) => {
+            reactiveTab.branch = branch
+          })
+          .catch(() => {})
+      }
+    }
+    activeTabId.value = tabs.value[0]?.id ?? null
+  }
+
   function focusPane(sessionId: string) {
     const tab = tabOf(sessionId)
     if (!tab) return
@@ -281,6 +350,7 @@ export const useTerminalsStore = defineStore('terminals', () => {
     sessions, tabs, activeTabId, focusedByTab, draggingTabId, draggingSessionId,
     activeTab, focusedSessionId, paneCount,
     create, split, moveTabIntoPane, movePaneIntoPane,
-    closePane, kill, killTab, setActiveTab, focusPane
+    closePane, kill, killTab, setActiveTab, focusPane,
+    serialize, restore
   }
 })

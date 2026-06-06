@@ -14,10 +14,12 @@ pub struct AppState {
 
 impl AppState {
     pub fn new() -> Self {
+        let persisted = store::load();
+        let zoom = persisted.zoom;
         Self {
             sessions: Mutex::new(HashMap::new()),
-            store: Mutex::new(store::load()),
-            zoom: Mutex::new(1.0),
+            store: Mutex::new(persisted),
+            zoom: Mutex::new(zoom),
         }
     }
 }
