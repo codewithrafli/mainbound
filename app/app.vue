@@ -15,11 +15,16 @@ const updater = useUpdaterStore()
 
 let unlistenMenu: UnlistenFn | undefined
 
+const settingsStore = useSettingsStore()
+
 onMounted(async () => {
   notifications.init()
   updater.init()
-  // silent auto-check shortly after launch
-  setTimeout(() => updater.check(false), 5_000)
+  await settingsStore.load()
+  if (settingsStore.settings.autoUpdateCheck) {
+    // silent auto-check shortly after launch
+    setTimeout(() => updater.check(false), 5_000)
+  }
   unlistenMenu = await listen<string>('menu://action', ({ payload }) => {
     switch (payload) {
       case 'new-session':
@@ -49,6 +54,9 @@ onMounted(async () => {
       case 'command-palette':
         ui.paletteOpen = !ui.paletteOpen
         break
+      case 'find':
+        if (ui.view === 'terminal') ui.terminalSearchOpen = true
+        break
     }
   })
 })
@@ -61,5 +69,6 @@ onBeforeUnmount(() => unlistenMenu?.())
     <NuxtPage />
     <UpdateModal />
     <CommandPalette />
+    <SettingsModal />
   </UApp>
 </template>

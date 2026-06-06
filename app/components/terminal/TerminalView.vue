@@ -5,6 +5,7 @@ import { leavesOf } from '~/stores/terminals'
 
 const terminals = useTerminalsStore()
 const workspaces = useWorkspacesStore()
+const ui = useUiStore()
 
 // Restore workspaces, then previous session layout (or a fresh session)
 onMounted(async () => {
@@ -13,10 +14,57 @@ onMounted(async () => {
   const saved = await invoke<SavedTab[] | null>('sessions_load').catch(() => null)
   if (Array.isArray(saved) && saved.length) {
     terminals.restore(saved)
-  } else {
+  } else if (workspaces.list.length) {
     terminals.create(workspaces.active?.path ?? null, workspaces.active?.name)
   }
+  // no workspaces yet → the onboarding overlay takes over
 })
+
+// --- ⌘F search (acts on the focused pane) ---------------------------------
+
+interface PaneHandle {
+  findNext: (q: string, incremental?: boolean) => void
+  findPrevious: (q: string) => void
+  clearSearch: () => void
+  focus: () => void
+}
+
+const paneRefs = new Map<string, PaneHandle>()
+const searchInput = ref()
+const searchQuery = ref('')
+
+function setPaneRef(sessionId: string, handle: unknown) {
+  if (handle) paneRefs.set(sessionId, handle as PaneHandle)
+  else paneRefs.delete(sessionId)
+}
+
+function focusedPane(): PaneHandle | undefined {
+  const id = terminals.focusedSessionId
+  return id ? paneRefs.get(id) : undefined
+}
+
+watch(() => ui.terminalSearchOpen, async (open) => {
+  if (open) {
+    await nextTick()
+    searchInput.value?.inputRef?.focus()
+  } else {
+    focusedPane()?.clearSearch()
+    searchQuery.value = ''
+    focusedPane()?.focus()
+  }
+})
+
+watch(searchQuery, (q) => {
+  if (q) focusedPane()?.findNext(q, true)
+  else focusedPane()?.clearSearch()
+})
+
+function searchStep(backwards = false) {
+  const q = searchQuery.value
+  if (!q) return
+  if (backwards) focusedPane()?.findPrevious(q)
+  else focusedPane()?.findNext(q)
+}
 
 // Persist the layout (debounced) whenever tabs/splits/cwds change
 let saveTimer: ReturnType<typeof setTimeout> | undefined
@@ -266,6 +314,47 @@ const dropOverlayStyle = computed(() => {
         @dragleave="onDragLeave"
         @drop="onDrop"
       >
+        <!-- ⌘F search bar -->
+        <div
+          v-if="ui.terminalSearchOpen"
+          class="absolute top-2 right-3 z-30 flex items-center gap-1 rounded-lg border border-(--ui-border-accented) bg-elevated shadow-lg p-1"
+        >
+          <UInput
+            ref="searchInput"
+            v-model="searchQuery"
+            placeholder="Find…"
+            size="xs"
+            class="w-44"
+            :ui="{ base: 'font-mono' }"
+            @keydown.enter.exact="searchStep()"
+            @keydown.shift.enter="searchStep(true)"
+            @keydown.esc="ui.terminalSearchOpen = false"
+          />
+          <UButton
+            icon="i-lucide-chevron-up"
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            aria-label="Previous match"
+            @click="searchStep(true)"
+          />
+          <UButton
+            icon="i-lucide-chevron-down"
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            aria-label="Next match"
+            @click="searchStep()"
+          />
+          <UButton
+            icon="i-lucide-x"
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            aria-label="Close search"
+            @click="ui.terminalSearchOpen = false"
+          />
+        </div>
         <div
           v-for="pane in layout.panes"
           :key="pane.sessionId"
@@ -278,6 +367,7 @@ const dropOverlayStyle = computed(() => {
             :class="paneRing(pane)"
           >
             <TerminalPane
+              :ref="(handle) => setPaneRef(pane.sessionId, handle)"
               :session-id="pane.sessionId"
               :cwd="terminals.sessions[pane.sessionId]?.cwd ?? null"
               @exited="terminals.closePane(pane.sessionId)"

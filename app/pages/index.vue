@@ -1,5 +1,14 @@
 <script setup lang="ts">
 const ui = useUiStore()
+const workspaces = useWorkspacesStore()
+const terminals = useTerminalsStore()
+
+const showOnboarding = computed(() =>
+  workspaces.initialized
+  && !workspaces.list.length
+  && !terminals.tabs.length
+  && !ui.onboardingSkipped
+)
 </script>
 
 <template>
@@ -13,7 +22,7 @@ const ui = useUiStore()
 
         <!-- v-show (not v-if): terminal panes must stay mounted across view
              toggles so PTYs and xterm scrollback survive -->
-        <main class="flex-1 min-h-0">
+        <main class="relative flex-1 min-h-0">
           <TerminalView
             v-show="ui.view === 'terminal'"
             class="h-full"
@@ -22,6 +31,7 @@ const ui = useUiStore()
             v-show="ui.view === 'changes'"
             class="h-full"
           />
+          <OnboardingOverlay v-if="showOnboarding" />
         </main>
 
         <LayoutStatusBar />

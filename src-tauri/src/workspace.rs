@@ -122,3 +122,15 @@ pub fn sessions_save(state: State<'_, AppState>, data: serde_json::Value) -> App
 pub fn sessions_load(state: State<'_, AppState>) -> serde_json::Value {
     state.store.lock().sessions.clone()
 }
+
+#[tauri::command]
+pub fn settings_save(state: State<'_, AppState>, data: serde_json::Value) -> AppResult<()> {
+    let mut store = state.store.lock();
+    store.settings = data;
+    store::save(&store)
+}
+
+#[tauri::command]
+pub fn settings_load(state: State<'_, AppState>) -> serde_json::Value {
+    state.store.lock().settings.clone()
+}

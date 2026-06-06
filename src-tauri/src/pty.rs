@@ -45,12 +45,15 @@ pub fn pty_spawn(
     cwd: Option<String>,
     cols: u16,
     rows: u16,
+    shell: Option<String>,
 ) -> AppResult<String> {
     let id = id.unwrap_or_else(|| Uuid::new_v4().to_string());
     if state.sessions.lock().contains_key(&id) {
         return Err(AppError::Pty(format!("session {id} already exists")));
     }
-    let shell = default_shell();
+    let shell = shell
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(default_shell);
     let cwd = cwd
         .map(PathBuf::from)
         .or_else(dirs::home_dir)

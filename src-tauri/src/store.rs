@@ -33,6 +33,9 @@ pub struct PersistedState {
     /// frontend-owned session layout snapshot (tabs, splits, cwds)
     #[serde(default)]
     pub sessions: serde_json::Value,
+    /// frontend-owned user settings (font size, shell, notifications…)
+    #[serde(default)]
+    pub settings: serde_json::Value,
 }
 
 fn state_file() -> PathBuf {
