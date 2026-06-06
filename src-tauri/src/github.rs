@@ -294,6 +294,27 @@ pub async fn gh_device_poll(
     Ok(PollResult { status: status.into(), user: None })
 }
 
+async fn api_put(token: &str, path: &str, payload: serde_json::Value) -> AppResult<serde_json::Value> {
+    let resp = http()
+        .put(format!("{API}{path}"))
+        .bearer_auth(token)
+        .header("Accept", "application/vnd.github+json")
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| AppError::Pty(format!("github: {e}")))?;
+    let status = resp.status();
+    let body: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| AppError::Pty(format!("github: {e}")))?;
+    if !status.is_success() {
+        let msg = body["message"].as_str().unwrap_or("request failed");
+        return Err(AppError::Pty(format!("github ({status}): {msg}")));
+    }
+    Ok(body)
+}
+
 // ---------------------------------------------------------------------------
 // Remote info + push/pull (git CLI — uses the user's credential helper)
 // ---------------------------------------------------------------------------
@@ -491,6 +512,377 @@ pub async fn gh_create_pr(
     )
     .await?;
     Ok(parse_pr(&pr))
+}
+
+// ---------------------------------------------------------------------------
+// PR detail — full conversation + checks, so the user never needs the
+// GitHub website to follow a PR.
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize, Clone)]
+pub struct CheckRun {
+    pub name: String,
+    pub status: String,
+    pub conclusion: Option<String>,
+    pub url: Option<String>,
+}
+
+/// One entry of the GitHub-style conversation timeline.
+#[derive(Serialize, Clone)]
+pub struct TimelineItem {
+    /// "comment" | "review" | "commit" | "event"
+    pub kind: String,
+    pub author: String,
+    pub avatar_url: Option<String>,
+    /// OWNER | MEMBER | COLLABORATOR | CONTRIBUTOR | NONE
+    pub association: Option<String>,
+    pub body: String,
+    pub created_at: String,
+    pub sha: Option<String>,
+    /// approved | changes_requested | commented | dismissed
+    pub review_state: Option<String>,
+    /// merged | closed | reopened | review_requested | head_ref_force_pushed
+    pub event: Option<String>,
+}
+
+#[derive(Serialize, Clone)]
+pub struct ThreadComment {
+    /// REST databaseId — used for replies
+    pub id: u64,
+    pub author: String,
+    pub avatar_url: Option<String>,
+    pub association: Option<String>,
+    pub body: String,
+    pub created_at: String,
+    pub diff_hunk: Option<String>,
+}
+
+#[derive(Serialize, Clone)]
+pub struct ReviewThread {
+    /// GraphQL node id — used for resolve/unresolve
+    pub id: String,
+    pub resolved: bool,
+    pub outdated: bool,
+    pub path: String,
+    pub line: Option<u64>,
+    pub comments: Vec<ThreadComment>,
+}
+
+#[derive(Serialize, Clone)]
+pub struct PrDetail {
+    pub number: u64,
+    pub title: String,
+    pub body: String,
+    pub state: String,
+    pub merged: bool,
+    pub mergeable: Option<bool>,
+    pub draft: bool,
+    pub head_ref: String,
+    pub base_ref: String,
+    pub head_sha: String,
+    pub author: String,
+    pub author_avatar: Option<String>,
+    pub html_url: String,
+    pub additions: u64,
+    pub deletions: u64,
+    pub commits: u64,
+    pub changed_files: u64,
+    pub timeline: Vec<TimelineItem>,
+    pub threads: Vec<ReviewThread>,
+    pub checks: Vec<CheckRun>,
+}
+
+async fn graphql(token: &str, query: &str, variables: serde_json::Value) -> AppResult<serde_json::Value> {
+    let resp = http()
+        .post("https://api.github.com/graphql")
+        .bearer_auth(token)
+        .json(&json!({ "query": query, "variables": variables }))
+        .send()
+        .await
+        .map_err(|e| AppError::Pty(format!("github: {e}")))?;
+    let body: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| AppError::Pty(format!("github: {e}")))?;
+    if let Some(errors) = body["errors"].as_array() {
+        if let Some(first) = errors.first() {
+            return Err(AppError::Pty(format!(
+                "github: {}",
+                first["message"].as_str().unwrap_or("graphql error")
+            )));
+        }
+    }
+    Ok(body["data"].clone())
+}
+
+const THREADS_QUERY: &str = r#"
+query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      reviewThreads(first: 50) {
+        nodes {
+          id isResolved isOutdated path line
+          comments(first: 50) {
+            nodes {
+              databaseId body createdAt diffHunk authorAssociation
+              author { login avatarUrl }
+            }
+          }
+        }
+      }
+    }
+  }
+}"#;
+
+async fn fetch_threads(token: &str, owner: &str, name: &str, number: u64) -> Vec<ReviewThread> {
+    let Ok(data) = graphql(
+        token,
+        THREADS_QUERY,
+        json!({ "owner": owner, "name": name, "number": number }),
+    )
+    .await
+    else {
+        return Vec::new();
+    };
+    let mut threads = Vec::new();
+    let nodes = data["repository"]["pullRequest"]["reviewThreads"]["nodes"].clone();
+    if let Some(list) = nodes.as_array() {
+        for t in list {
+            let mut comments = Vec::new();
+            if let Some(cs) = t["comments"]["nodes"].as_array() {
+                for c in cs {
+                    comments.push(ThreadComment {
+                        id: c["databaseId"].as_u64().unwrap_or(0),
+                        author: c["author"]["login"].as_str().unwrap_or_default().to_string(),
+                        avatar_url: c["author"]["avatarUrl"].as_str().map(String::from),
+                        association: c["authorAssociation"].as_str().map(String::from),
+                        body: c["body"].as_str().unwrap_or_default().to_string(),
+                        created_at: c["createdAt"].as_str().unwrap_or_default().to_string(),
+                        diff_hunk: c["diffHunk"].as_str().map(String::from),
+                    });
+                }
+            }
+            threads.push(ReviewThread {
+                id: t["id"].as_str().unwrap_or_default().to_string(),
+                resolved: t["isResolved"].as_bool().unwrap_or(false),
+                outdated: t["isOutdated"].as_bool().unwrap_or(false),
+                path: t["path"].as_str().unwrap_or_default().to_string(),
+                line: t["line"].as_u64(),
+                comments,
+            });
+        }
+    }
+    threads
+}
+
+fn parse_timeline(items: &serde_json::Value) -> Vec<TimelineItem> {
+    let mut timeline = Vec::new();
+    let Some(list) = items.as_array() else { return timeline };
+    for item in list {
+        let event = item["event"].as_str().unwrap_or_default();
+        match event {
+            "commented" => timeline.push(TimelineItem {
+                kind: "comment".into(),
+                author: item["user"]["login"].as_str().unwrap_or_default().to_string(),
+                avatar_url: item["user"]["avatar_url"].as_str().map(String::from),
+                association: item["author_association"].as_str().map(String::from),
+                body: item["body"].as_str().unwrap_or_default().to_string(),
+                created_at: item["created_at"].as_str().unwrap_or_default().to_string(),
+                sha: None,
+                review_state: None,
+                event: None,
+            }),
+            "reviewed" => {
+                let review_state = item["state"].as_str().unwrap_or_default().to_string();
+                let body = item["body"].as_str().unwrap_or_default().to_string();
+                // empty "commented" review shells carry no info (their
+                // substance lives in the review threads)
+                if body.is_empty() && review_state == "commented" {
+                    continue;
+                }
+                timeline.push(TimelineItem {
+                    kind: "review".into(),
+                    author: item["user"]["login"].as_str().unwrap_or_default().to_string(),
+                    avatar_url: item["user"]["avatar_url"].as_str().map(String::from),
+                    association: item["author_association"].as_str().map(String::from),
+                    body,
+                    created_at: item["submitted_at"].as_str().unwrap_or_default().to_string(),
+                    sha: None,
+                    review_state: Some(review_state),
+                    event: None,
+                });
+            }
+            "committed" => timeline.push(TimelineItem {
+                kind: "commit".into(),
+                author: item["author"]["name"].as_str().unwrap_or_default().to_string(),
+                avatar_url: None,
+                association: None,
+                body: item["message"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .lines()
+                    .next()
+                    .unwrap_or_default()
+                    .to_string(),
+                created_at: item["author"]["date"].as_str().unwrap_or_default().to_string(),
+                sha: item["sha"].as_str().map(|s| s.get(..7).unwrap_or(s).to_string()),
+                review_state: None,
+                event: None,
+            }),
+            "merged" | "closed" | "reopened" | "review_requested" | "head_ref_force_pushed" => {
+                timeline.push(TimelineItem {
+                    kind: "event".into(),
+                    author: item["actor"]["login"].as_str().unwrap_or_default().to_string(),
+                    avatar_url: item["actor"]["avatar_url"].as_str().map(String::from),
+                    association: None,
+                    body: item["requested_reviewer"]["login"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .to_string(),
+                    created_at: item["created_at"].as_str().unwrap_or_default().to_string(),
+                    sha: None,
+                    review_state: None,
+                    event: Some(event.to_string()),
+                });
+            }
+            _ => {}
+        }
+    }
+    timeline.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+    timeline
+}
+
+#[tauri::command]
+pub async fn gh_pr_detail(
+    state: State<'_, AppState>,
+    owner: String,
+    name: String,
+    number: u64,
+) -> Result<PrDetail, AppError> {
+    let token = require_token(&state)?;
+    let base = format!("/repos/{owner}/{name}");
+
+    let pr = api_get(&token, &format!("{base}/pulls/{number}")).await?;
+    let timeline_raw = api_get(
+        &token,
+        &format!("{base}/issues/{number}/timeline?per_page=100"),
+    )
+    .await
+    .unwrap_or_default();
+    let threads = fetch_threads(&token, &owner, &name, number).await;
+    let sha = pr["head"]["sha"].as_str().unwrap_or_default().to_string();
+    let check_runs = api_get(&token, &format!("{base}/commits/{sha}/check-runs?per_page=100"))
+        .await
+        .unwrap_or_default();
+
+    let mut checks: Vec<CheckRun> = Vec::new();
+    if let Some(runs) = check_runs["check_runs"].as_array() {
+        for run in runs {
+            checks.push(CheckRun {
+                name: run["name"].as_str().unwrap_or_default().to_string(),
+                status: run["status"].as_str().unwrap_or_default().to_string(),
+                conclusion: run["conclusion"].as_str().map(String::from),
+                url: run["html_url"].as_str().map(String::from),
+            });
+        }
+    }
+
+    Ok(PrDetail {
+        number,
+        title: pr["title"].as_str().unwrap_or_default().to_string(),
+        body: pr["body"].as_str().unwrap_or_default().to_string(),
+        state: pr["state"].as_str().unwrap_or_default().to_string(),
+        merged: pr["merged"].as_bool().unwrap_or(false),
+        mergeable: pr["mergeable"].as_bool(),
+        draft: pr["draft"].as_bool().unwrap_or(false),
+        head_ref: pr["head"]["ref"].as_str().unwrap_or_default().to_string(),
+        base_ref: pr["base"]["ref"].as_str().unwrap_or_default().to_string(),
+        head_sha: sha,
+        author: pr["user"]["login"].as_str().unwrap_or_default().to_string(),
+        author_avatar: pr["user"]["avatar_url"].as_str().map(String::from),
+        html_url: pr["html_url"].as_str().unwrap_or_default().to_string(),
+        additions: pr["additions"].as_u64().unwrap_or(0),
+        deletions: pr["deletions"].as_u64().unwrap_or(0),
+        commits: pr["commits"].as_u64().unwrap_or(0),
+        changed_files: pr["changed_files"].as_u64().unwrap_or(0),
+        timeline: parse_timeline(&timeline_raw),
+        threads,
+        checks,
+    })
+}
+
+/// Reply inside an inline review thread (`comment_id` = thread root).
+#[tauri::command]
+pub async fn gh_pr_reply_thread(
+    state: State<'_, AppState>,
+    owner: String,
+    name: String,
+    number: u64,
+    comment_id: u64,
+    body: String,
+) -> Result<(), AppError> {
+    let token = require_token(&state)?;
+    api_post(
+        &token,
+        &format!("/repos/{owner}/{name}/pulls/{number}/comments"),
+        json!({ "body": body, "in_reply_to": comment_id }),
+    )
+    .await
+    .map(|_| ())
+}
+
+/// Resolve/unresolve a review thread (GraphQL-only operation).
+#[tauri::command]
+pub async fn gh_pr_resolve_thread(
+    state: State<'_, AppState>,
+    thread_id: String,
+    resolved: bool,
+) -> Result<(), AppError> {
+    let token = require_token(&state)?;
+    let mutation = if resolved {
+        "mutation($id: ID!) { resolveReviewThread(input: { threadId: $id }) { thread { isResolved } } }"
+    } else {
+        "mutation($id: ID!) { unresolveReviewThread(input: { threadId: $id }) { thread { isResolved } } }"
+    };
+    graphql(&token, mutation, json!({ "id": thread_id })).await.map(|_| ())
+}
+
+#[tauri::command]
+pub async fn gh_pr_comment(
+    state: State<'_, AppState>,
+    owner: String,
+    name: String,
+    number: u64,
+    body: String,
+) -> Result<(), AppError> {
+    let token = require_token(&state)?;
+    api_post(
+        &token,
+        &format!("/repos/{owner}/{name}/issues/{number}/comments"),
+        json!({ "body": body }),
+    )
+    .await
+    .map(|_| ())
+}
+
+/// `method`: "merge" | "squash" | "rebase". Destructive-ish — the UI
+/// confirms explicitly before calling this.
+#[tauri::command]
+pub async fn gh_pr_merge(
+    state: State<'_, AppState>,
+    owner: String,
+    name: String,
+    number: u64,
+    method: String,
+) -> Result<(), AppError> {
+    let token = require_token(&state)?;
+    api_put(
+        &token,
+        &format!("/repos/{owner}/{name}/pulls/{number}/merge"),
+        json!({ "merge_method": method }),
+    )
+    .await
+    .map(|_| ())
 }
 
 #[derive(Serialize, Clone)]

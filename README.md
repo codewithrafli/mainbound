@@ -12,11 +12,11 @@ A macOS terminal workspace for parallel coding sessions — inspired by [cmux](h
 ## Development
 
 ```bash
-npm install
-npm run tauri dev
+bun install
+bun run tauri dev
 ```
 
-Requires Rust (`rustup`), Node 20+, and `git` on PATH.
+Requires Rust (`rustup`), [Bun](https://bun.sh), and `git` on PATH.
 
 > Note: `src-tauri/.cargo/config.toml` redirects build artifacts to a local
 > disk path (`~/.cache/cargo-target/tide`) — adjust or delete it on other machines.
@@ -24,7 +24,7 @@ Requires Rust (`rustup`), Node 20+, and `git` on PATH.
 ## Build
 
 ```bash
-npm run tauri build   # produces .app + .dmg under the cargo target dir
+bun run tauri build   # produces .app + .dmg under the cargo target dir
 ```
 
 ## Keyboard shortcuts

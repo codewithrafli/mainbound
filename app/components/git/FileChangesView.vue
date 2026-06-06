@@ -1,7 +1,13 @@
 <script setup lang="ts">
 const ui = useUiStore()
 const git = useGitStore()
+const github = useGithubStore()
 const workspaces = useWorkspacesStore()
+
+// picking a file closes the PR detail (back to diff view)
+watch(() => git.selected, (file) => {
+  if (file) github.closePrDetail()
+})
 
 // Refresh statuses whenever the user switches into this view
 watch(() => ui.view, async (view) => {
@@ -31,7 +37,8 @@ onBeforeUnmount(() => unlistenFocus?.())
 <template>
   <div class="flex h-full min-h-0">
     <GitRepoSidebar />
-    <GitDiffViewer />
+    <GithubPrDetailView v-if="github.prDetail || github.loadingDetail" />
+    <GitDiffViewer v-else />
     <GitCommitPanel />
   </div>
 </template>

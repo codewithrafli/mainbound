@@ -15,7 +15,7 @@ const branchInfo = computed(() => {
 </script>
 
 <template>
-  <footer class="flex items-center h-6 shrink-0 px-3 gap-4 border-t border-default bg-muted text-[11px] text-muted select-none">
+  <footer class="flex items-center h-6 shrink-0 px-3 gap-4 border-t border-(--ui-border-muted) text-[10.5px] font-mono text-dimmed select-none">
     <span class="flex items-center gap-1">
       <UIcon
         name="i-lucide-terminal"
@@ -54,7 +54,7 @@ const branchInfo = computed(() => {
         />
         {{ github.user.login }}
       </span>
-      <span class="flex items-center gap-1">
+      <span class="flex items-center gap-1.5">
         <span class="size-1.5 rounded-full bg-green-500" />
         Ready
       </span>

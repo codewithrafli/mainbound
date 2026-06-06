@@ -27,11 +27,6 @@ function ciColor(sha: string): string {
   return 'bg-green-500'
 }
 
-async function openPr(url: string) {
-  const { openUrl } = await import('@tauri-apps/plugin-opener')
-  await openUrl(url)
-}
-
 const generating = ref(false)
 const aiError = ref<string | null>(null)
 
@@ -68,29 +63,29 @@ async function submitPr() {
     title.value = ''
     body.value = ''
     createOpen.value = false
-    openPr(pr.html_url)
+    // open the new PR in-app
+    github.openPrDetail(repo.value, pr.number)
   }
 }
 </script>
 
 <template>
-  <div v-if="github.user && repo">
-    <button
-      class="flex items-center gap-1.5 w-full px-3 pt-4 pb-1.5 text-[10px] font-medium tracking-wider text-dimmed uppercase hover:text-muted"
-      @click="prsOpen = !prsOpen"
-    >
-      <UIcon
-        :name="prsOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
-        class="size-3"
-      />
-      Pull Requests
-      <UBadge
-        color="neutral"
-        variant="soft"
-        size="sm"
+  <div
+    v-if="github.user && repo"
+    class="panel-card overflow-hidden"
+  >
+    <div class="flex items-center gap-1.5 px-3 py-2 section-label border-b border-(--ui-border-muted)">
+      <button
+        class="flex items-center gap-1.5 hover:text-toned"
+        @click="prsOpen = !prsOpen"
       >
-        {{ prs.length }}
-      </UBadge>
+        <UIcon
+          :name="prsOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+          class="size-3"
+        />
+        Pull Requests
+        <span class="font-mono text-dimmed">{{ prs.length }}</span>
+      </button>
       <UButton
         label="New"
         icon="i-lucide-git-pull-request-create"
@@ -100,11 +95,11 @@ async function submitPr() {
         class="ml-auto"
         @click.stop="createOpen = true"
       />
-    </button>
+    </div>
 
     <div
       v-show="prsOpen"
-      class="px-3 pb-2 space-y-2"
+      class="px-3 py-2.5 space-y-2"
     >
       <div
         v-if="github.loadingPrs"
@@ -119,7 +114,7 @@ async function submitPr() {
         v-for="pr in prs"
         :key="pr.number"
         class="flex w-full gap-2 text-left group"
-        @click="openPr(pr.html_url)"
+        @click="github.openPrDetail(repo!, pr.number)"
       >
         <span
           class="mt-1 size-1.5 shrink-0 rounded-full"
@@ -137,7 +132,7 @@ async function submitPr() {
           </span>
         </span>
         <UIcon
-          name="i-lucide-external-link"
+          name="i-lucide-panel-right-open"
           class="ml-auto mt-0.5 size-3 shrink-0 text-dimmed opacity-0 group-hover:opacity-100"
         />
       </button>
@@ -212,7 +207,8 @@ async function submitPr() {
           />
           <UButton
             label="Create Pull Request"
-            color="primary"
+            color="neutral"
+            variant="solid"
             size="sm"
             block
             :loading="creating"

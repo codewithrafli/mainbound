@@ -2,48 +2,50 @@
 @import "@nuxt/ui";
 @import "@xterm/xterm/css/xterm.css";
 
-/* Dark, dense theme matching the reference design */
+/* Console-style dark theme: floating frame on black, soft layered
+   surfaces, larger radii, mono data text */
 .dark {
-  --ui-bg: #0d0d0d;
-  --ui-bg-muted: #131313;
-  --ui-bg-elevated: #1a1a1a;
-  --ui-bg-accented: #232323;
-  --ui-border: #1f1f1f;
-  --ui-border-muted: #1a1a1a;
-  --ui-border-accented: #2a2a2a;
-  --ui-text-dimmed: #555555;
-  --ui-text-muted: #888888;
-  --ui-text-toned: #aaaaaa;
-  --ui-text: #cccccc;
-  --ui-text-highlighted: #f0f0f0;
-  --ui-radius: 0.375rem;
+  --ui-bg: #0e0e10;
+  --ui-bg-muted: #131316;
+  --ui-bg-elevated: #1a1a1f;
+  --ui-bg-accented: #232329;
+  --ui-border: #232329;
+  --ui-border-muted: #1b1b20;
+  --ui-border-accented: #2e2e35;
+  --ui-text-dimmed: #56565e;
+  --ui-text-muted: #8b8b93;
+  --ui-text-toned: #b2b2ba;
+  --ui-text: #cdcdd3;
+  --ui-text-highlighted: #f2f2f5;
+  --ui-radius: 0.55rem;
 }
 
 html, body, #__nuxt {
   height: 100%;
   overflow: hidden;
-  background: var(--ui-bg);
+  background: #000000;
 }
 
-/* xterm fills its pane; padding keeps text off the edges */
+/* xterm fills its pane — padding lives on the WRAPPER, never here:
+   FitAddon doesn't account for CSS padding on the host element and
+   would compute the wrong cols/rows */
 .xterm {
   height: 100%;
-  padding: 8px 10px;
 }
 
-/* slim, unobtrusive scrollbars to match the dense reference UI */
+/* slim, unobtrusive scrollbars */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #2e2e2e;
+  background: #2e2e35;
   border-radius: 5px;
   border: 3px solid transparent;
   background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #3a3a3a;
+  background: #3a3a42;
   background-clip: content-box;
   border: 3px solid transparent;
 }
@@ -54,4 +56,23 @@ html, body, #__nuxt {
 
 ::selection {
   background: #264f78;
+}
+
+/* reusable bits for the console look */
+.panel-card {
+  border: 1px solid var(--ui-border);
+  border-radius: 0.75rem;
+  background: var(--ui-bg-muted);
+}
+.section-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ui-text-muted);
+}
+.btn-gradient {
+  background: linear-gradient(90deg, #8b5cf6 0%, #d946ef 60%, #f0abfc 100%);
+  color: #ffffff;
+}
+.btn-gradient:hover {
+  filter: brightness(1.08);
 }

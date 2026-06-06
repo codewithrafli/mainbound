@@ -1,38 +1,37 @@
 <script setup lang="ts">
-import type { TabsItem } from '@nuxt/ui'
-
 const ui = useUiStore()
+const terminals = useTerminalsStore()
+const workspaces = useWorkspacesStore()
 
-const viewTabs: TabsItem[] = [
-  { label: 'Terminal', value: 'terminal' },
-  { label: 'File Changes', value: 'changes' }
-]
+function newSession() {
+  ui.view = 'terminal'
+  terminals.create(workspaces.active?.path ?? null, workspaces.active?.name)
+}
 </script>
 
 <template>
   <header
     data-tauri-drag-region
-    class="relative flex items-center h-11 shrink-0 px-3 border-b border-default bg-muted"
+    class="flex items-center h-12 shrink-0 gap-2 px-3 border-b border-default select-none"
   >
-    <!-- left: workspace switcher, offset for macOS traffic lights -->
-    <div class="flex items-center gap-2 pl-[72px]">
-      <LayoutWorkspaceSwitcher />
-    </div>
+    <LayoutWorkspaceSwitcher />
+    <span class="text-[11px] text-dimmed">
+      {{ ui.view === 'terminal' ? 'Terminal' : 'File Changes' }}
+    </span>
 
-    <!-- center: view toggle -->
-    <div class="absolute left-1/2 -translate-x-1/2">
-      <UTabs
-        v-model="ui.view"
-        :items="viewTabs"
-        :content="false"
-        color="neutral"
-        size="xs"
-      />
-    </div>
+    <span
+      data-tauri-drag-region
+      class="flex-1 h-full"
+    />
 
-    <!-- right: actions -->
-    <div class="ml-auto flex items-center gap-1.5">
-      <GithubMenu />
-    </div>
+    <!-- white primary CTA, console-style -->
+    <UButton
+      label="New Session"
+      icon="i-lucide-plus"
+      color="neutral"
+      variant="solid"
+      size="xs"
+      @click="newSession"
+    />
   </header>
 </template>
