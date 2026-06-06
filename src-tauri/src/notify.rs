@@ -9,6 +9,7 @@ pub fn send(app: &AppHandle, title: &str, body: &str) {
         .builder()
         .title(title)
         .body(body)
+        .sound("Ping")
         .show()
         .is_ok();
     if !shown {

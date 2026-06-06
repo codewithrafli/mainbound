@@ -15,6 +15,7 @@ interface Activity {
 
 export const useNotificationsStore = defineStore('notifications', () => {
   const terminals = useTerminalsStore()
+  const toast = useToast()
 
   /** unread badge per tab, cleared when the tab is activated */
   const unreadByTab = ref<Record<string, number>>({})
@@ -70,7 +71,26 @@ export const useNotificationsStore = defineStore('notifications', () => {
     if (tab) {
       unreadByTab.value[tab.id] = (unreadByTab.value[tab.id] ?? 0) + 1
     }
-    // dispatch via Rust: notification plugin with osascript fallback —
+    // cmux-style in-app toast — always visible regardless of OS settings
+    const targetTab = tab?.id
+    toast.add({
+      title,
+      description: body,
+      icon: 'i-lucide-bell-ring',
+      duration: 6_000,
+      ...(targetTab
+        ? {
+            actions: [{
+              label: 'Open session',
+              onClick: () => {
+                terminals.setActiveTab(targetTab)
+              }
+            }]
+          }
+        : {})
+    })
+
+    // native banner + sound via Rust (plugin → osascript fallback) —
     // never gated on a cached permission snapshot
     const { invoke } = await import('@tauri-apps/api/core')
     invoke('notify', { title, body }).catch(() => {})
