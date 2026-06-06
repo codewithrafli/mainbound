@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "typecheck": "nuxt typecheck",
     "generate": "nuxt generate",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "release": "bash scripts/release.sh"
   },
   "dependencies": {
     "@git-diff-view/vue": "^0.1.5",
@@ -45,5 +46,6 @@
     "@parcel/watcher",
     "unrs-resolver"
   ],
-  "packageManager": "bun@1.2.18"
+  "packageManager": "bun@1.2.18",
+  "version": "0.2.0"
 }
