@@ -34,29 +34,11 @@ function onDragStart(tabId: string, event: DragEvent) {
     <!-- SESSIONS -->
     <div class="flex items-center px-3 pt-3 pb-1.5">
       <span class="section-label">Sessions</span>
+      <span
+        v-if="workspaces.active"
+        class="ml-1.5 text-[10px] text-dimmed truncate max-w-24"
+      >· {{ workspaces.active.name }}</span>
       <span class="ml-auto flex items-center">
-        <UTooltip text="Split right (⌘D)">
-          <UButton
-            icon="i-lucide-columns-2"
-            color="neutral"
-            variant="ghost"
-            size="xs"
-            aria-label="Split right"
-            :disabled="!terminals.focusedSessionId"
-            @click="terminals.split('row')"
-          />
-        </UTooltip>
-        <UTooltip text="Split down (⇧⌘D)">
-          <UButton
-            icon="i-lucide-rows-2"
-            color="neutral"
-            variant="ghost"
-            size="xs"
-            aria-label="Split down"
-            :disabled="!terminals.focusedSessionId"
-            @click="terminals.split('column')"
-          />
-        </UTooltip>
         <UDropdownMenu
           v-if="repoItems.length"
           :items="repoItems"
@@ -76,7 +58,7 @@ function onDragStart(tabId: string, event: DragEvent) {
 
     <nav class="flex-1 overflow-y-auto px-2 space-y-0.5">
       <div
-        v-for="tab in terminals.tabs"
+        v-for="tab in terminals.visibleTabs"
         :key="tab.id"
         role="button"
         tabindex="0"
@@ -135,7 +117,7 @@ function onDragStart(tabId: string, event: DragEvent) {
       </div>
 
       <p
-        v-if="!terminals.tabs.length"
+        v-if="!terminals.visibleTabs.length"
         class="px-2 py-4 text-xs text-dimmed italic"
       >
         No sessions yet.

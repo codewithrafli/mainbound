@@ -96,7 +96,7 @@ const groups = computed(() => [
   {
     id: 'sessions',
     label: 'Sessions',
-    items: terminals.tabs.map(tab => ({
+    items: terminals.visibleTabs.map(tab => ({
       label: tab.title,
       icon: 'i-lucide-terminal',
       suffix: tab.branch ?? undefined,

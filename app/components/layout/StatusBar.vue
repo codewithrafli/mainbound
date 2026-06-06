@@ -22,7 +22,7 @@ const branchInfo = computed(() => {
         name="i-lucide-terminal"
         class="size-3"
       />
-      {{ terminals.tabs.length }} session{{ terminals.tabs.length === 1 ? '' : 's' }}<template v-if="terminals.paneCount > terminals.tabs.length"> · {{ terminals.paneCount }} panes</template>
+      {{ terminals.visibleTabs.length }} session{{ terminals.visibleTabs.length === 1 ? '' : 's' }}<template v-if="terminals.paneCount > terminals.visibleTabs.length"> · {{ terminals.paneCount }} panes</template>
     </span>
 
     <span

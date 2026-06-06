@@ -66,6 +66,32 @@ function searchStep(backwards = false) {
   else focusedPane()?.findNext(q)
 }
 
+// right-click menu: split/close belong to the pane under the cursor
+function paneMenuItems(sessionId: string) {
+  return [[
+    {
+      label: 'Split Right',
+      icon: 'i-lucide-columns-2',
+      kbds: ['meta', 'D'],
+      onSelect: () => terminals.splitPane(sessionId, 'row')
+    },
+    {
+      label: 'Split Down',
+      icon: 'i-lucide-rows-2',
+      kbds: ['shift', 'meta', 'D'],
+      onSelect: () => terminals.splitPane(sessionId, 'column')
+    }
+  ], [
+    {
+      label: 'Close Pane',
+      icon: 'i-lucide-x',
+      kbds: ['meta', 'W'],
+      color: 'error' as const,
+      onSelect: () => terminals.kill(sessionId)
+    }
+  ]]
+}
+
 // Persist the layout (debounced) whenever tabs/splits/cwds change
 let saveTimer: ReturnType<typeof setTimeout> | undefined
 watch(() => terminals.tabs, () => {
@@ -362,17 +388,19 @@ const dropOverlayStyle = computed(() => {
           :style="paneStyle(pane)"
           @mousedown.capture="terminals.focusPane(pane.sessionId)"
         >
-          <div
-            class="h-full w-full overflow-hidden rounded-sm"
-            :class="paneRing(pane)"
-          >
-            <TerminalPane
-              :ref="(handle) => setPaneRef(pane.sessionId, handle)"
-              :session-id="pane.sessionId"
-              :cwd="terminals.sessions[pane.sessionId]?.cwd ?? null"
-              @exited="terminals.closePane(pane.sessionId)"
-            />
-          </div>
+          <UContextMenu :items="paneMenuItems(pane.sessionId)">
+            <div
+              class="h-full w-full overflow-hidden rounded-sm"
+              :class="paneRing(pane)"
+            >
+              <TerminalPane
+                :ref="(handle) => setPaneRef(pane.sessionId, handle)"
+                :session-id="pane.sessionId"
+                :cwd="terminals.sessions[pane.sessionId]?.cwd ?? null"
+                @exited="terminals.closePane(pane.sessionId)"
+              />
+            </div>
+          </UContextMenu>
 
           <!-- grab handle: drag a pane to re-dock it on another pane's edge -->
           <div
@@ -391,19 +419,39 @@ const dropOverlayStyle = computed(() => {
             />
           </div>
 
-          <!-- close pane (hover) -->
-          <button
-            class="absolute top-1 right-1.5 z-10 flex items-center justify-center size-4 rounded
-                 bg-[#1a1a1a] text-dimmed hover:text-red-400 hover:bg-[#222222]
-                 opacity-0 group-hover/pane:opacity-100 transition-opacity"
-            title="Close pane (⌘W)"
-            @click.stop="terminals.kill(pane.sessionId)"
-          >
-            <UIcon
-              name="i-lucide-x"
-              class="size-3"
-            />
-          </button>
+          <!-- pane actions (hover): split + close — splits belong to THIS pane -->
+          <div class="absolute top-1 right-1.5 z-10 flex items-center gap-0.5 opacity-0 group-hover/pane:opacity-100 transition-opacity">
+            <button
+              class="flex items-center justify-center size-4 rounded bg-[#1a1a1a] text-dimmed hover:text-toned hover:bg-[#222222]"
+              title="Split right (⌘D)"
+              @click.stop="terminals.splitPane(pane.sessionId, 'row')"
+            >
+              <UIcon
+                name="i-lucide-columns-2"
+                class="size-3"
+              />
+            </button>
+            <button
+              class="flex items-center justify-center size-4 rounded bg-[#1a1a1a] text-dimmed hover:text-toned hover:bg-[#222222]"
+              title="Split down (⇧⌘D)"
+              @click.stop="terminals.splitPane(pane.sessionId, 'column')"
+            >
+              <UIcon
+                name="i-lucide-rows-2"
+                class="size-3"
+              />
+            </button>
+            <button
+              class="flex items-center justify-center size-4 rounded bg-[#1a1a1a] text-dimmed hover:text-red-400 hover:bg-[#222222]"
+              title="Close pane (⌘W)"
+              @click.stop="terminals.kill(pane.sessionId)"
+            >
+              <UIcon
+                name="i-lucide-x"
+                class="size-3"
+              />
+            </button>
+          </div>
         </div>
 
         <div
@@ -430,7 +478,7 @@ const dropOverlayStyle = computed(() => {
         />
 
         <div
-          v-if="!terminals.tabs.length"
+          v-if="!terminals.visibleTabs.length"
           class="absolute inset-0 flex items-center justify-center"
         >
           <div class="panel-card flex flex-col items-center gap-3 px-12 py-12 rounded-2xl">
