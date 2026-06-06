@@ -15,7 +15,34 @@ export default defineNuxtConfig({
 
   app: {
     head: {
-      htmlAttrs: { class: 'dark' }
+      htmlAttrs: { class: 'dark' },
+      script: [{
+        // field-debugging safety net: the app background is pure black,
+        // so any fatal startup error would otherwise look like a dead
+        // black window. This inline script runs even if bundles fail.
+        innerHTML: `(function(){
+          function show(msg){
+            var el = document.getElementById('mb-fatal');
+            if (!el) {
+              el = document.createElement('pre');
+              el.id = 'mb-fatal';
+              el.style.cssText = 'position:fixed;left:12px;right:12px;bottom:12px;z-index:99999;max-height:45vh;overflow:auto;margin:0;padding:12px 14px;border-radius:10px;border:1px solid #7f1d1d;background:#1a0a0a;color:#fca5a5;font:11px ui-monospace,monospace;white-space:pre-wrap;';
+              document.documentElement.appendChild(el);
+            }
+            el.textContent += msg + '\\n';
+          }
+          window.addEventListener('error', function(e){
+            show('[error] ' + (e.message || e.type) + (e.filename ? ' @ ' + e.filename + ':' + e.lineno : ''));
+          }, true);
+          window.addEventListener('unhandledrejection', function(e){
+            show('[rejection] ' + (e.reason && (e.reason.stack || e.reason.message) || e.reason));
+          });
+          setTimeout(function(){
+            var root = document.getElementById('__nuxt');
+            if (!root || !root.firstChild) show('[fatal] UI failed to mount after 8s — app bundle did not start. macOS ' + navigator.userAgent);
+          }, 8000);
+        })();`
+      }]
     }
   },
 
