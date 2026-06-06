@@ -27,6 +27,8 @@ export interface TerminalTab {
   title: string
   branch: string | null
   root: PaneNode
+  /** owning workspace; null = not tied to a workspace (e.g. home dir) */
+  workspaceId: string | null
 }
 
 export type SavedNode
@@ -36,6 +38,7 @@ export type SavedNode
 export interface SavedTab {
   title: string
   root: SavedNode
+  workspaceId?: string | null
 }
 
 function basename(path: string | null): string | null {
@@ -88,6 +91,8 @@ function removeLeaf(node: PaneNode, sessionId: string): PaneNode | null {
 }
 
 export const useTerminalsStore = defineStore('terminals', () => {
+  const workspaces = useWorkspacesStore()
+
   const sessions = ref<Record<string, TerminalSession>>({})
   const tabs = ref<TerminalTab[]>([])
   const activeTabId = ref<string | null>(null)
@@ -100,6 +105,34 @@ export const useTerminalsStore = defineStore('terminals', () => {
   const activeTab = computed(() =>
     tabs.value.find(t => t.id === activeTabId.value) ?? null
   )
+
+  /**
+   * Tabs belonging to the active workspace. Workspace-less tabs
+   * (skipped onboarding, home-dir sessions) are always visible.
+   * Hidden tabs keep their PTYs running — switching back restores
+   * everything, scrollback included.
+   */
+  const visibleTabs = computed(() =>
+    tabs.value.filter(t =>
+      t.workspaceId === null || t.workspaceId === workspaces.activeId
+    )
+  )
+
+  // switching workspace swaps the visible set; land on one of its tabs
+  watch(() => workspaces.activeId, (workspaceId) => {
+    if (activeTab.value && visibleTabs.value.some(t => t.id === activeTab.value!.id)) return
+    const first = visibleTabs.value[0]
+    if (first) {
+      activeTabId.value = first.id
+    } else if (workspaceId) {
+      // empty workspace → start a session in it
+      const workspace = workspaces.list.find(w => w.id === workspaceId)
+      if (workspace) create(workspace.path, workspace.name)
+      else activeTabId.value = null
+    } else {
+      activeTabId.value = null
+    }
+  })
 
   const focusedSessionId = computed(() =>
     activeTab.value ? focusedByTab.value[activeTab.value.id] ?? null : null
@@ -124,13 +157,15 @@ export const useTerminalsStore = defineStore('terminals', () => {
    * TerminalPane on mount, after its event listeners are attached
    * (avoids losing the first prompt bytes).
    */
-  function create(cwd: string | null = null, title?: string): TerminalTab {
+  function create(cwd: string | null = null, title?: string, workspaceId?: string | null): TerminalTab {
     const session = newSession(cwd, title)
     const tab: TerminalTab = {
       id: crypto.randomUUID(),
       title: title ?? basename(cwd) ?? 'zsh',
       branch: null,
-      root: { type: 'leaf', sessionId: session.id }
+      root: { type: 'leaf', sessionId: session.id },
+      // sessions belong to the workspace they were opened in
+      workspaceId: workspaceId !== undefined ? workspaceId : (cwd ? workspaces.activeId : null)
     }
     tabs.value.push(tab)
     activeTabId.value = tab.id
@@ -147,18 +182,24 @@ export const useTerminalsStore = defineStore('terminals', () => {
     return tab
   }
 
-  /** Splits the focused pane of the active tab; the new pane inherits its cwd. */
-  function split(direction: 'row' | 'column') {
-    const tab = activeTab.value
-    const focused = focusedSessionId.value
-    if (!tab || !focused) return
-    const origin = sessions.value[focused]
+  /** Splits a specific pane; the new pane inherits its cwd. */
+  function splitPane(sessionId: string, direction: 'row' | 'column') {
+    const tab = tabOf(sessionId)
+    if (!tab) return
+    const origin = sessions.value[sessionId]
     const session = newSession(origin?.cwd ?? null, origin?.title)
-    tab.root = insertAtLeaf(tab.root, focused, {
+    tab.root = insertAtLeaf(tab.root, sessionId, {
       type: 'leaf',
       sessionId: session.id
     }, direction)
+    activeTabId.value = tab.id
     focusedByTab.value[tab.id] = session.id
+  }
+
+  /** Splits the focused pane of the active tab (⌘D / ⇧⌘D). */
+  function split(direction: 'row' | 'column') {
+    const focused = focusedSessionId.value
+    if (focused) splitPane(focused, direction)
   }
 
   /**
@@ -244,7 +285,7 @@ export const useTerminalsStore = defineStore('terminals', () => {
       tabs.value.splice(idx, 1)
       focusedByTab.value = dropKeys(focusedByTab.value, [tab.id])
       if (activeTabId.value === tab.id) {
-        activeTabId.value = tabs.value[Math.min(idx, tabs.value.length - 1)]?.id ?? null
+        activeTabId.value = visibleTabs.value[0]?.id ?? null
       }
       return
     }
@@ -271,7 +312,7 @@ export const useTerminalsStore = defineStore('terminals', () => {
     tabs.value.splice(idx, 1)
     focusedByTab.value = dropKeys(focusedByTab.value, [tabId])
     if (activeTabId.value === tabId) {
-      activeTabId.value = tabs.value[Math.min(idx, tabs.value.length - 1)]?.id ?? null
+      activeTabId.value = visibleTabs.value[0]?.id ?? null
     }
   }
 
@@ -296,7 +337,11 @@ export const useTerminalsStore = defineStore('terminals', () => {
 
   /** Layout snapshot (cwds + split tree), safe to persist. */
   function serialize(): SavedTab[] {
-    return tabs.value.map(tab => ({ title: tab.title, root: serializeNode(tab.root) }))
+    return tabs.value.map(tab => ({
+      title: tab.title,
+      root: serializeNode(tab.root),
+      workspaceId: tab.workspaceId
+    }))
   }
 
   function restoreNode(node: SavedNode): PaneNode {
@@ -315,13 +360,18 @@ export const useTerminalsStore = defineStore('terminals', () => {
 
   /** Rebuilds tabs from a snapshot — fresh PTYs spawn per pane on mount. */
   function restore(saved: SavedTab[]) {
+    // drop tabs whose workspace no longer exists
+    const knownWorkspaces = new Set(workspaces.list.map(w => w.id))
     for (const savedTab of saved) {
+      const workspaceId = savedTab.workspaceId ?? null
+      if (workspaceId && !knownWorkspaces.has(workspaceId)) continue
       const root = restoreNode(savedTab.root)
       const tab: TerminalTab = {
         id: crypto.randomUUID(),
         title: savedTab.title,
         branch: null,
-        root
+        root,
+        workspaceId
       }
       tabs.value.push(tab)
       const firstLeaf = leavesOf(root)[0]!
@@ -336,7 +386,8 @@ export const useTerminalsStore = defineStore('terminals', () => {
           .catch(() => {})
       }
     }
-    activeTabId.value = tabs.value[0]?.id ?? null
+    // land on a tab of the active workspace
+    activeTabId.value = visibleTabs.value[0]?.id ?? tabs.value[0]?.id ?? null
   }
 
   function focusPane(sessionId: string) {
@@ -347,9 +398,9 @@ export const useTerminalsStore = defineStore('terminals', () => {
   }
 
   return {
-    sessions, tabs, activeTabId, focusedByTab, draggingTabId, draggingSessionId,
+    sessions, tabs, visibleTabs, activeTabId, focusedByTab, draggingTabId, draggingSessionId,
     activeTab, focusedSessionId, paneCount,
-    create, split, moveTabIntoPane, movePaneIntoPane,
+    create, split, splitPane, moveTabIntoPane, movePaneIntoPane,
     closePane, kill, killTab, setActiveTab, focusPane,
     serialize, restore
   }
