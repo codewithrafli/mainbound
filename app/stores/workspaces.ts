@@ -74,5 +74,5 @@ export const useWorkspacesStore = defineStore('workspaces', () => {
     }
   }
 
-  return { list, activeId, active, repos, scanning, init, add, setActive, remove, scan }
+  return { list, activeId, active, repos, scanning, initialized, init, add, setActive, remove, scan }
 })

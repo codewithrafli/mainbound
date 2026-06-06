@@ -3,6 +3,7 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
+import { SearchAddon } from '@xterm/addon-search'
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
@@ -16,12 +17,21 @@ const emit = defineEmits<{
 }>()
 
 const notifications = useNotificationsStore()
+const { settings } = useSettingsStore()
 const el = ref<HTMLDivElement>()
 
 let term: Terminal | undefined
 let fit: FitAddon | undefined
+let search: SearchAddon | undefined
 let resizeObserver: ResizeObserver | undefined
 const unlisteners: UnlistenFn[] = []
+
+// live font-size from settings
+watch(() => settings.fontSize, (size) => {
+  if (!term) return
+  term.options.fontSize = size
+  fit?.fit()
+})
 
 onMounted(async () => {
   term = new Terminal({
@@ -29,7 +39,7 @@ onMounted(async () => {
     allowProposedApi: true,
     cursorBlink: true,
     scrollback: 10_000,
-    fontSize: 12.5,
+    fontSize: settings.fontSize,
     fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
     lineHeight: 1.35,
     theme: {
@@ -47,6 +57,8 @@ onMounted(async () => {
   // p10k-style prompts position the cursor past the rendered text
   term.loadAddon(new Unicode11Addon())
   term.unicode.activeVersion = '11'
+  search = new SearchAddon()
+  term.loadAddon(search)
   term.open(el.value!)
   try {
     term.loadAddon(new WebglAddon())
@@ -84,7 +96,8 @@ onMounted(async () => {
       id: props.sessionId,
       cwd: props.cwd,
       cols: term.cols,
-      rows: term.rows
+      rows: term.rows,
+      shell: settings.shell || null
     })
   } catch (err) {
     term.writeln(`\x1b[31mfailed to spawn shell: ${err}\x1b[0m`)
@@ -128,7 +141,28 @@ function focus() {
   term?.focus()
 }
 
-defineExpose({ focus })
+const SEARCH_DECOR = {
+  matchBackground: '#3b3b7a',
+  matchBorder: '#3b82f6',
+  matchOverviewRuler: '#3b82f6',
+  activeMatchBackground: '#b45309',
+  activeMatchBorder: '#f59e0b',
+  activeMatchColorOverviewRuler: '#f59e0b'
+}
+
+function findNext(query: string, incremental = false) {
+  search?.findNext(query, { incremental, decorations: SEARCH_DECOR })
+}
+
+function findPrevious(query: string) {
+  search?.findPrevious(query, { decorations: SEARCH_DECOR })
+}
+
+function clearSearch() {
+  search?.clearDecorations()
+}
+
+defineExpose({ focus, findNext, findPrevious, clearSearch })
 </script>
 
 <template>

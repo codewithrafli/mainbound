@@ -1,7 +1,5 @@
 import { leavesOf } from '~/stores/terminals'
 
-/** Minimum sustained output before "command finished" fires. */
-const MIN_BURST_MS = 10_000
 /** Silence that marks the end of a burst. */
 const QUIET_MS = 2_500
 /** Per-session cooldown between notifications. */
@@ -15,6 +13,7 @@ interface Activity {
 
 export const useNotificationsStore = defineStore('notifications', () => {
   const terminals = useTerminalsStore()
+  const { settings } = useSettingsStore()
   const toast = useToast()
 
   /** unread badge per tab, cleared when the tab is activated */
@@ -132,7 +131,8 @@ export const useNotificationsStore = defineStore('notifications', () => {
       if (now - a.lastAt < QUIET_MS) continue
       const duration = a.lastAt - a.burstStart
       a.burstStart = null
-      if (duration >= MIN_BURST_MS && !isWatched(sessionId)) {
+      const minBurst = (settings.notifMinBurst || 10) * 1000
+      if (duration >= minBurst && !isWatched(sessionId)) {
         const secs = Math.round(duration / 1000)
         fire(sessionId, 'Command finished', `"${sessionLabel(sessionId)}" went quiet after ${secs}s of output`)
       }

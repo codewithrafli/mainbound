@@ -44,6 +44,7 @@ export default defineNuxtConfig({
         '@tauri-apps/plugin-opener',
         '@xterm/xterm',
         '@xterm/addon-fit',
+        '@xterm/addon-search',
         '@xterm/addon-unicode11',
         '@xterm/addon-webgl'
       ]

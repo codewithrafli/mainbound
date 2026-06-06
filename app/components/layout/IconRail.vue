@@ -1,4 +1,5 @@
 <script setup lang="ts">
+const settingsStore = useSettingsStore()
 </script>
 
 <template>
@@ -22,8 +23,23 @@
       class="flex-1 w-full"
     />
 
-    <!-- account -->
-    <div class="pb-3">
+    <!-- settings + account -->
+    <div class="flex flex-col items-center gap-2 pb-3">
+      <UTooltip
+        text="Settings"
+        :content="{ side: 'right' }"
+      >
+        <button
+          class="flex items-center justify-center size-8 rounded-lg text-dimmed hover:text-toned hover:bg-elevated/50 transition-colors"
+          aria-label="Settings"
+          @click="settingsStore.modalOpen = true"
+        >
+          <UIcon
+            name="i-lucide-settings"
+            class="size-4"
+          />
+        </button>
+      </UTooltip>
       <GithubMenu />
     </div>
   </aside>

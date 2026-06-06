@@ -36,6 +36,12 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
     .copy()
     .paste()
     .select_all()
+    .separator()
+    .item(
+      &MenuItemBuilder::with_id("find", "Find")
+        .accelerator("CmdOrCtrl+F")
+        .build(app)?,
+    )
     .build()?;
 
   let shell = SubmenuBuilder::new(app, "Shell")
@@ -197,6 +203,8 @@ pub fn run() {
       workspace::repo_scan,
       workspace::sessions_save,
       workspace::sessions_load,
+      workspace::settings_save,
+      workspace::settings_load,
     ])
     .setup(|app| {
       build_menu(app.handle())?;
