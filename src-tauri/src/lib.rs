@@ -76,6 +76,12 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
     )
     .separator()
     .item(
+      &MenuItemBuilder::with_id("command-palette", "Command Palette")
+        .accelerator("CmdOrCtrl+K")
+        .build(app)?,
+    )
+    .separator()
+    .item(
       &MenuItemBuilder::with_id("zoom-in", "Zoom In")
         .accelerator("CmdOrCtrl+=")
         .build(app)?,
@@ -154,6 +160,8 @@ pub fn run() {
       pty::pty_list,
       git::git_branch,
       git::git_repo_root,
+      git::git_branches,
+      git::git_checkout,
       git::git_discard,
       git::git_status,
       git::git_diff,
@@ -177,6 +185,7 @@ pub fn run() {
       github::gh_pr_for_branch,
       github::gh_pr_reviews,
       github::gh_pr_detail,
+      github::gh_pr_files,
       github::gh_pr_comment,
       github::gh_pr_reply_thread,
       github::gh_pr_resolve_thread,

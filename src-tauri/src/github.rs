@@ -825,6 +825,46 @@ pub async fn gh_pr_detail(
     })
 }
 
+#[derive(Serialize, Clone)]
+pub struct PrFile {
+    pub filename: String,
+    pub status: String,
+    pub additions: u64,
+    pub deletions: u64,
+    /// unified hunks; None for binary/very large files
+    pub patch: Option<String>,
+}
+
+#[tauri::command]
+pub async fn gh_pr_files(
+    state: State<'_, AppState>,
+    owner: String,
+    name: String,
+    number: u64,
+) -> Result<Vec<PrFile>, AppError> {
+    let token = require_token(&state)?;
+    let body = api_get(
+        &token,
+        &format!("/repos/{owner}/{name}/pulls/{number}/files?per_page=100"),
+    )
+    .await?;
+    Ok(body
+        .as_array()
+        .map(|files| {
+            files
+                .iter()
+                .map(|f| PrFile {
+                    filename: f["filename"].as_str().unwrap_or_default().to_string(),
+                    status: f["status"].as_str().unwrap_or_default().to_string(),
+                    additions: f["additions"].as_u64().unwrap_or(0),
+                    deletions: f["deletions"].as_u64().unwrap_or(0),
+                    patch: f["patch"].as_str().map(String::from),
+                })
+                .collect()
+        })
+        .unwrap_or_default())
+}
+
 /// Reply inside an inline review thread (`comment_id` = thread root).
 #[tauri::command]
 pub async fn gh_pr_reply_thread(

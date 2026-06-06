@@ -46,6 +46,9 @@ onMounted(async () => {
       case 'check-updates':
         updater.check(true)
         break
+      case 'command-palette':
+        ui.paletteOpen = !ui.paletteOpen
+        break
     }
   })
 })
@@ -57,5 +60,6 @@ onBeforeUnmount(() => unlistenMenu?.())
   <UApp>
     <NuxtPage />
     <UpdateModal />
+    <CommandPalette />
   </UApp>
 </template>

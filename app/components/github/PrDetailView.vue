@@ -1,10 +1,34 @@
 <script setup lang="ts">
-import type { CheckRun, ReviewThread, TimelineItem } from '~/stores/github'
+import { DiffView, DiffModeEnum } from '@git-diff-view/vue'
+import '@git-diff-view/vue/styles/diff-view.css'
+import type { CheckRun, PrFile, ReviewThread, TimelineItem } from '~/stores/github'
 
 const github = useGithubStore()
 const git = useGitStore()
 
-const tab = ref<'conversation' | 'checks'>('conversation')
+const tab = ref<'conversation' | 'files' | 'checks'>('conversation')
+
+function openFilesTab() {
+  tab.value = 'files'
+  if (!github.prFiles) github.loadPrFiles()
+}
+
+function fileDiffData(file: PrFile) {
+  return {
+    oldFile: { fileName: file.filename, fileLang: diffLang(file.filename) },
+    newFile: { fileName: file.filename, fileLang: diffLang(file.filename) },
+    hunks: [file.patch ?? '']
+  }
+}
+
+function fileBadge(status: string): { label: string, cls: string } {
+  switch (status) {
+    case 'added': return { label: 'A', cls: 'text-green-400' }
+    case 'removed': return { label: 'D', cls: 'text-red-400' }
+    case 'renamed': return { label: 'R', cls: 'text-blue-400' }
+    default: return { label: 'M', cls: 'text-amber-400' }
+  }
+}
 const newComment = ref('')
 const commenting = ref(false)
 const mergeOpen = ref(false)
@@ -245,6 +269,13 @@ const stateBadge = computed(() => {
             @click="tab = 'conversation'"
           />
           <UButton
+            :label="`Files (${pr.changed_files})`"
+            color="neutral"
+            :variant="tab === 'files' ? 'soft' : 'ghost'"
+            size="xs"
+            @click="openFilesTab"
+          />
+          <UButton
             :label="`Checks (${pr.checks.length})`"
             color="neutral"
             :variant="tab === 'checks' ? 'soft' : 'ghost'"
@@ -321,6 +352,61 @@ const stateBadge = computed(() => {
             />
           </template>
         </div>
+      </div>
+
+      <!-- files changed -->
+      <div
+        v-show="tab === 'files'"
+        class="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-3"
+      >
+        <div
+          v-if="github.loadingFiles"
+          class="flex justify-center py-8"
+        >
+          <UIcon
+            name="i-lucide-loader-circle"
+            class="size-5 animate-spin text-dimmed"
+          />
+        </div>
+
+        <div
+          v-for="file in github.prFiles ?? []"
+          :key="file.filename"
+          class="rounded-lg border border-default overflow-hidden"
+        >
+          <div class="flex items-center gap-2 px-3 py-1.5 bg-muted border-b border-default">
+            <span
+              class="w-3.5 text-center font-mono text-xs font-semibold"
+              :class="fileBadge(file.status).cls"
+            >{{ fileBadge(file.status).label }}</span>
+            <span class="font-mono text-[11px] text-toned truncate">{{ file.filename }}</span>
+            <span class="flex-1" />
+            <span class="text-[10px] font-mono text-green-500">+{{ file.additions }}</span>
+            <span class="text-[10px] font-mono text-red-500">-{{ file.deletions }}</span>
+          </div>
+          <DiffView
+            v-if="file.patch"
+            :data="fileDiffData(file)"
+            :diff-view-mode="DiffModeEnum.Unified"
+            :diff-view-theme="'dark'"
+            :diff-view-highlight="true"
+            :diff-view-wrap="false"
+            :diff-view-font-size="12"
+          />
+          <p
+            v-else
+            class="px-3 py-3 text-[11px] text-dimmed italic"
+          >
+            No textual diff (binary or too large).
+          </p>
+        </div>
+
+        <p
+          v-if="!github.loadingFiles && github.prFiles && !github.prFiles.length"
+          class="text-xs text-dimmed italic"
+        >
+          No files changed.
+        </p>
       </div>
 
       <!-- checks -->

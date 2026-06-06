@@ -62,6 +62,40 @@ pub fn git_repo_root(path: String) -> Option<String> {
     repo_root(Path::new(&path)).map(|p| p.to_string_lossy().into_owned())
 }
 
+#[derive(Serialize, Clone)]
+pub struct BranchInfo {
+    pub name: String,
+    pub current: bool,
+}
+
+#[tauri::command]
+pub fn git_branches(repo: String) -> AppResult<Vec<BranchInfo>> {
+    let out = run_git_str(&repo, &["branch", "--format=%(refname:short)\t%(HEAD)"], &[])?;
+    Ok(out
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| {
+            let mut cols = line.split('\t');
+            BranchInfo {
+                name: cols.next().unwrap_or_default().to_string(),
+                current: cols.next().map(|h| h.trim() == "*").unwrap_or(false),
+            }
+        })
+        .collect())
+}
+
+/// Checkout (or create with `-b`) a branch. Surfaces real git errors —
+/// e.g. "would be overwritten by checkout" — verbatim to the UI.
+#[tauri::command]
+pub fn git_checkout(repo: String, branch: String, create: bool) -> AppResult<()> {
+    let mut args = vec!["checkout"];
+    if create {
+        args.push("-b");
+    }
+    args.push(&branch);
+    run_git(&repo, &args, &[]).map(|_| ())
+}
+
 // ---------------------------------------------------------------------------
 // git CLI plumbing
 // ---------------------------------------------------------------------------
