@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:1200px; height:750px; overflow:hidden; background:#000; }
+  body { font-family:-apple-system,'SF Pro Display','Inter',sans-serif; color:#cdcdd3;
+         -webkit-font-smoothing:antialiased; }
+  .mono { font-family:ui-monospace,'SF Mono',Menlo,monospace; }
+  #stage { position:relative; width:1200px; height:750px; background:
+           radial-gradient(1200px 600px at 50% 120%, #0d1030 0%, #000 60%); }
+
+  /* ---- intro / end card ---- */
+  .card { position:absolute; inset:0; display:flex; flex-direction:column;
+          align-items:center; justify-content:center; gap:18px; }
+  .card img { width:96px; height:96px; border-radius:22px;
+              box-shadow:0 0 80px rgba(92,114,234,.45); }
+  .card h1 { font-size:42px; font-weight:700; color:#f2f2f5; letter-spacing:-.5px; }
+  .card .tag { font-size:18px; color:#8b8b93; }
+  .card .cmd { margin-top:10px; font-size:13px; color:#b2b2ba; background:#131316;
+               border:1px solid #2e2e35; border-radius:10px; padding:10px 18px; }
+  .card .cmd b { color:#a78bfa; font-weight:600; }
+
+  /* ---- app frame ---- */
+  #frame { position:absolute; left:40px; right:40px; top:34px; bottom:34px;
+           background:#0e0e10; border:1px solid #232329; border-radius:18px;
+           overflow:hidden; box-shadow:0 30px 80px rgba(0,0,0,.85); display:flex; }
+  #rail { width:46px; border-right:1px solid #232329; background:rgba(19,19,22,.6);
+          display:flex; flex-direction:column; align-items:center; padding:46px 0 12px; }
+  #rail img { width:30px; height:30px; border-radius:8px; }
+  #rail .dot { margin-top:auto; width:26px; height:26px; border-radius:50%;
+               background:linear-gradient(135deg,#3f4bb1,#5c72ea); }
+  #col { flex:1; display:flex; flex-direction:column; min-width:0; }
+
+  #topbar { height:46px; border-bottom:1px solid #232329; display:flex;
+            align-items:center; padding:0 12px; gap:8px; position:relative; }
+  .wsp { display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600;
+         color:#f2f2f5; padding:4px 10px; border-radius:8px; }
+  .wsp i { width:13px; height:13px; border:1.4px solid #8b8b93; border-radius:3px; display:inline-block; }
+  #pill { position:absolute; left:50%; transform:translateX(-50%); display:flex;
+          background:rgba(19,19,22,.7); border:1px solid #232329; border-radius:999px;
+          padding:3px; font-size:11.5px; }
+  #pill .opt { position:relative; z-index:1; padding:4px 14px; color:#8b8b93; transition:color .2s; }
+  #pill .opt kbd { font-size:8px; color:#56565e; margin-left:5px; }
+  #pill #slider { position:absolute; top:3px; bottom:3px; border-radius:999px;
+                  background:#1a1a1f; border:1px solid #2e2e35; }
+  #newbtn { margin-left:auto; background:#f2f2f5; color:#0e0e10; font-size:11.5px;
+            font-weight:600; padding:5px 11px; border-radius:7px; }
+
+  #cockpit { height:34px; border-bottom:1px solid #1b1b20; display:flex; align-items:center;
+             gap:6px; padding:0 12px; font-size:10.5px; }
+  .chip { display:inline-flex; align-items:center; gap:5px; border:1px solid #232329;
+          border-radius:999px; padding:3px 10px; color:#8b8b93; white-space:nowrap; }
+  .chip b { color:#b2b2ba; font-weight:500; }
+  .chip .gd { width:6px; height:6px; border-radius:50%; background:#22c55e; }
+  .amber { color:#fbbf24!important; border-color:rgba(251,191,36,.25)!important; }
+  .green { color:#4ade80!important; }
+
+  #body { flex:1; position:relative; min-height:0; }
+  .view { position:absolute; inset:0; display:flex; }
+
+  /* terminal view */
+  #side { width:180px; border-right:1px solid #232329; background:rgba(19,19,22,.4); padding:10px; }
+  .lbl { font-size:10px; color:#8b8b93; font-weight:500; margin-bottom:8px; }
+  .sess { background:#1a1a1f; border:1px solid #2e2e35; border-radius:9px; padding:7px 9px; }
+  .sess .t { font-size:12px; color:#f2f2f5; }
+  .sess .b { font-size:9.5px; color:#56565e; margin-top:2px; }
+  #term { flex:1; padding:14px 16px; font-size:12.5px; line-height:1.7; }
+  #term .ln { white-space:pre; }
+  .p-user{color:#c4a7f7}.p-dir{color:#93b4f5}.p-br{color:#fbbf24}
+  .dim{color:#56565e}.ok{color:#4ade80}.out{color:#8b8b93}
+  .cursor { display:inline-block; width:7px; height:14px; background:#cdcdd3;
+            vertical-align:-2px; }
+
+  /* changes view */
+  #files { width:200px; border-right:1px solid #232329; background:rgba(19,19,22,.4); padding:10px; }
+  .file { display:flex; gap:7px; align-items:center; font-size:11px; padding:5px 7px;
+          border-radius:7px; color:#b2b2ba; }
+  .file.on { background:#1a1a1f; border:1px solid #2e2e35; }
+  .file .s { width:10px; font-weight:700; font-size:10px; }
+  .sM{color:#fbbf24}.sU{color:#4ade80}
+  .file .pm { margin-left:auto; font-size:9px; }
+  #diff { flex:1; padding:14px; font-size:11px; line-height:1.85; }
+  #diff .dl { border-radius:4px; padding:0 8px; white-space:pre; }
+  .add { background:rgba(74,222,128,.09); color:#4ade80; }
+  .del { background:rgba(248,113,113,.09); color:#f87171; }
+  .ctx { color:#56565e; }
+  #commit { width:240px; border-left:1px solid #232329; background:rgba(19,19,22,.4);
+            padding:12px; display:flex; flex-direction:column; gap:10px; }
+  .pc { background:#131316; border:1px solid #232329; border-radius:11px; padding:10px; }
+  .pc .h { font-size:10px; color:#8b8b93; margin-bottom:7px; }
+  .inp { background:#0e0e10; border:1px solid #2e2e35; border-radius:7px; padding:7px 9px;
+         font-size:11px; min-height:16px; color:#f2f2f5; }
+  .ai { display:inline-flex; gap:5px; align-items:center; font-size:10.5px; color:#a78bfa;
+        margin:8px 0 0 1px; }
+  #commitbtn { margin-top:9px; background:#f2f2f5; color:#0e0e10; text-align:center;
+               font-size:11.5px; font-weight:600; padding:7px; border-radius:7px; }
+
+  #toast { position:absolute; right:18px; bottom:18px; background:#1a1a1f;
+           border:1px solid #2e2e35; border-radius:12px; padding:11px 14px;
+           display:flex; gap:9px; align-items:center; font-size:12px;
+           box-shadow:0 12px 40px rgba(0,0,0,.6); }
+  #toast .gd { width:8px; height:8px; border-radius:50%; background:#22c55e; }
+</style>
+</head>
+<body>
+<div id="stage">
+
+  <div class="card" id="intro">
+    <img src="../../public/mainbound-logo.svg">
+    <h1>Mainbound</h1>
+    <div class="tag">From shell to main.</div>
+  </div>
+
+  <div id="frame">
+    <div id="rail">
+      <img src="../../public/mainbound-logo.svg">
+      <div class="dot"></div>
+    </div>
+    <div id="col">
+      <div id="topbar">
+        <div class="wsp"><i></i> mainbound <span style="color:#56565e">▾</span></div>
+        <div id="pill">
+          <div id="slider"></div>
+          <div class="opt" id="optT">Terminal <kbd>⌘1</kbd></div>
+          <div class="opt" id="optC">File Changes <kbd>⌘2</kbd></div>
+        </div>
+        <div id="newbtn">＋ New Session</div>
+      </div>
+      <div id="cockpit" class="mono">
+        <span class="chip" id="chBr"><b> develop</b> <span style="color:#56565e">▾</span></span>
+        <span class="chip" id="chChg">clean</span>
+        <span class="chip" id="chSync">synced</span>
+        <span style="flex:1"></span>
+        <span class="chip" id="chPr" style="opacity:0"><span class="gd"></span> <b>#12</b> feat: cockpit</span>
+        <span class="chip green" id="chCi" style="opacity:0"><span class="gd"></span> CI 5/5</span>
+      </div>
+      <div id="body">
+
+        <div class="view" id="vTerm">
+          <div id="side">
+            <div class="lbl">SESSIONS · mainbound</div>
+            <div class="sess"><div class="t">▸ mainbound</div><div class="b mono"> develop</div></div>
+          </div>
+          <div id="term" class="mono"></div>
+        </div>
+
+        <div class="view" id="vChg" style="opacity:0">
+          <div id="files">
+            <div class="lbl">CHANGES <span class="mono" style="color:#56565e">5</span></div>
+            <div class="file" data-i="0"><span class="s sM">M</span>cockpit.rs<span class="pm mono"><span class="ok">+84</span></span></div>
+            <div class="file on" data-i="1"><span class="s sM">M</span>CockpitBar.vue<span class="pm mono"><span class="ok">+121</span></span></div>
+            <div class="file" data-i="2"><span class="s sU">U</span>cockpit.ts<span class="pm mono"><span class="ok">+96</span></span></div>
+            <div class="file" data-i="3"><span class="s sM">M</span>lib.rs<span class="pm mono"><span class="ok">+12</span></span></div>
+            <div class="file" data-i="4"><span class="s sM">M</span>github.rs<span class="pm mono"><span class="ok">+45</span></span></div>
+          </div>
+          <div id="diff" class="mono">
+            <div class="dl ctx">  const cockpit = useCockpitStore()</div>
+            <div class="dl del">- // TODO: show PR status</div>
+            <div class="dl add">+ const pr = computed(() =&gt; cockpit.pr)</div>
+            <div class="dl add">+ const checks = computed(() =&gt; cockpit.checks)</div>
+            <div class="dl ctx">  watch(activeCwd, refresh)</div>
+            <div class="dl add">+ // reviews + CI, no browser needed</div>
+            <div class="dl add">+ const reviews = computed(() =&gt; cockpit.reviews)</div>
+          </div>
+          <div id="commit">
+            <div class="pc">
+              <div class="h">⌥ COMMIT</div>
+              <div class="inp mono" id="sum"><span class="dim">Summary (required)</span></div>
+              <div class="ai" id="ai">✨ Generate with AI</div>
+              <div id="commitbtn">Commit</div>
+            </div>
+            <div class="pc">
+              <div class="h">⟳ HISTORY</div>
+              <div id="hist" style="font-size:10.5px;color:#8b8b93;line-height:1.9"></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" style="opacity:0"><span class="gd"></span> Pull request <b>#12</b> merged ✅</div>
+
+  <div class="card" id="end" style="opacity:0">
+    <img src="../../public/mainbound-logo.svg">
+    <h1>Mainbound</h1>
+    <div class="tag">Terminal → Commit → Push → PR → CI → Merge</div>
+    <div class="cmd mono"><b>curl</b> -fsSL mainbound.sh/install | bash</div>
+  </div>
+
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+// progress 0..1 between start/end seconds, eased
+const ph = (t,s,e) => clamp((t-s)/(e-s), 0, 1);
+const ease = p => p<.5 ? 2*p*p : 1-Math.pow(-2*p+2,2)/2;
+
+const PROMPT = '<span class="p-user"> mainbound</span><span class="dim"> on </span><span class="p-br"> develop</span><span class="dim"> ❯ </span>';
+const CMD = 'bun run build';
+const OUT = [
+  ['out','  building client…'],
+  ['out','  building server…'],
+  ['out','  optimizing chunks…'],
+  ['ok','✓ built in 1.24s']
+];
+
+function typeSlice(str, p){ return str.slice(0, Math.round(str.length * p)); }
+
+window.renderFrame = function(t){
+  // ---- intro (0–2) ----
+  const ip = ph(t, .1, 1.0), io = 1 - ph(t, 1.5, 2.1);
+  $('intro').style.opacity = Math.min(ip, io);
+  $('intro').style.transform = `scale(${.92 + .08*ease(ip)})`;
+
+  // ---- frame in (1.7–2.5) ----
+  const fp = ease(ph(t, 1.7, 2.5));
+  $('frame').style.opacity = fp;
+  $('frame').style.transform = `translateY(${28*(1-fp)}px) scale(${.97+.03*fp})`;
+
+  // ---- terminal typing (2.6–5.4) ----
+  const tp = ph(t, 2.7, 4.0);
+  let html = '<div class="ln">' + PROMPT + typeSlice(CMD, tp);
+  if (t < 4.0) html += '<span class="cursor"></span>';
+  html += '</div>';
+  if (t >= 4.0) {
+    OUT.forEach((line, i) => {
+      const lp = ph(t, 4.1 + i*.35, 4.35 + i*.35);
+      if (lp > 0) html += `<div class="ln ${line[0]}" style="opacity:${lp}">${line[1]}</div>`;
+    });
+    if (t >= 5.6) html += '<div class="ln">' + PROMPT + '<span class="cursor"></span></div>';
+  }
+  $('term').innerHTML = html;
+
+  // ---- cockpit "5 changed" (5.6) ----
+  const cp = ph(t, 5.6, 6.0);
+  const chg = $('chChg');
+  if (cp > 0) { chg.textContent = '5 changed'; chg.classList.add('amber');
+    chg.style.transform = `scale(${1+.18*Math.sin(Math.PI*cp)})`; }
+  else { chg.textContent = 'clean'; chg.classList.remove('amber'); chg.style.transform=''; }
+
+  // ---- pill slide + view switch (6.4–7.0) ----
+  const optT = $('optT'), optC = $('optC'), sl = $('slider');
+  const sw = ease(ph(t, 6.4, 6.9));
+  const tw = optT.offsetWidth, cw = optC.offsetWidth;
+  sl.style.left = (3 + sw * tw) + 'px';
+  sl.style.width = (tw + sw * (cw - tw)) + 'px';
+  optT.style.color = sw < .5 ? '#f2f2f5' : '#8b8b93';
+  optC.style.color = sw >= .5 ? '#f2f2f5' : '#8b8b93';
+  $('vTerm').style.opacity = 1 - sw;
+  $('vChg').style.opacity = sw;
+  $('vChg').style.transform = `translateY(${8*(1-sw)}px)`;
+
+  // ---- files cascade (6.9–7.8) ----
+  document.querySelectorAll('.file').forEach(f => {
+    const i = +f.dataset.i;
+    const p = ease(ph(t, 6.9 + i*.12, 7.2 + i*.12));
+    f.style.opacity = p; f.style.transform = `translateX(${-10*(1-p)}px)`;
+  });
+
+  // ---- AI generate (8.2–10.2) ----
+  const aiGlow = ph(t, 8.2, 8.6);
+  $('ai').style.textShadow = aiGlow > 0 && t < 10.5 ? `0 0 ${10*Math.sin(Math.PI*ph(t,8.2,10.2))}px #a78bfa` : 'none';
+  const sumP = ph(t, 8.8, 10.0);
+  $('sum').innerHTML = sumP > 0
+    ? typeSlice('feat: add PR cockpit with live CI', sumP) + (sumP < 1 ? '<span class="cursor" style="height:11px"></span>' : '')
+    : '<span class="dim">Summary (required)</span>';
+
+  // ---- commit press (10.4) + history (10.8) ----
+  const press = ph(t, 10.4, 10.7);
+  $('commitbtn').style.transform = `scale(${1 - .08*Math.sin(Math.PI*press)})`;
+  $('hist').innerHTML = ph(t, 10.8, 11.0) > 0
+    ? '<span style="color:#5c72ea">●</span> feat: add PR cockpit <span class="mono" style="color:#56565e">a1b2c3 · now</span>'
+    : '';
+
+  // ---- push: sync chip ↑1 → spinner → synced (11.0–12.2) ----
+  const sync = $('chSync');
+  if (t >= 12.2) { sync.innerHTML = 'synced'; sync.classList.remove('amber'); }
+  else if (t >= 11.6) { sync.innerHTML = '⟳ pushing…'; sync.classList.add('amber'); }
+  else if (t >= 11.0) { sync.innerHTML = '<span class="green">↑1</span>'; }
+  else sync.innerHTML = 'synced';
+
+  // ---- PR + CI chips (12.3 / 12.9) ----
+  const prp = ease(ph(t, 12.3, 12.8));
+  $('chPr').style.opacity = prp; $('chPr').style.transform = `translateX(${10*(1-prp)}px)`;
+  const cip = ease(ph(t, 12.9, 13.4));
+  $('chCi').style.opacity = cip; $('chCi').style.transform = `translateX(${10*(1-cip)}px)`;
+
+  // ---- toast (13.5–15.2) ----
+  const top = ease(ph(t, 13.5, 14.0)) * (1 - ease(ph(t, 14.9, 15.4)));
+  $('toast').style.opacity = top;
+  $('toast').style.transform = `translateY(${14*(1-top)}px)`;
+
+  // ---- end card (15.2–16.5) ----
+  const ep = ease(ph(t, 15.2, 16.0));
+  $('frame').style.opacity = Math.min(fp, 1 - ep);
+  $('frame').style.filter = `blur(${6*ep}px)`;
+  $('end').style.opacity = ep;
+  $('end').style.transform = `scale(${.94+.06*ep})`;
+};
+renderFrame(0);
+</script>
+</body>
+</html>

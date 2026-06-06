@@ -12,7 +12,8 @@
     "generate": "nuxt generate",
     "tauri": "tauri",
     "release": "bash scripts/release.sh",
-    "demo": "bash scripts/record-demo.sh"
+    "demo": "bash scripts/record-demo.sh",
+    "demo:motion": "bun scripts/demo-motion/render.mjs"
   },
   "dependencies": {
     "@git-diff-view/vue": "^0.1.5",
@@ -41,6 +42,7 @@
     "@nuxt/eslint": "^1.15.2",
     "@tauri-apps/cli": "^2.11.2",
     "eslint": "^10.4.1",
+    "playwright": "^1.60.0",
     "typescript": "^6.0.3",
     "vue-tsc": "^3.3.3"
   },
