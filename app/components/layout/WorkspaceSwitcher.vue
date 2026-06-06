@@ -24,13 +24,17 @@ const items = computed<DropdownMenuItem[][]>(() => [
     :content="{ align: 'start' }"
     :ui="{ content: 'w-56' }"
   >
-    <UButton
-      :label="workspaces.active?.name ?? 'No workspace'"
-      trailing-icon="i-lucide-chevron-down"
-      color="neutral"
-      variant="outline"
-      size="xs"
-      class="rounded-full px-3"
-    />
+    <!-- plain text + chevron, like the reference's context switcher -->
+    <button class="flex items-center gap-1.5 px-2 py-1 rounded-lg text-sm font-medium text-highlighted hover:bg-elevated/60 transition-colors">
+      <UIcon
+        name="i-lucide-folder"
+        class="size-3.5 text-muted"
+      />
+      {{ workspaces.active?.name ?? 'No workspace' }}
+      <UIcon
+        name="i-lucide-chevron-down"
+        class="size-3 text-dimmed"
+      />
+    </button>
   </UDropdownMenu>
 </template>

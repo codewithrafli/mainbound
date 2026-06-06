@@ -13,6 +13,11 @@ async function switchTo(login: string) {
 }
 
 const items = computed<DropdownMenuItem[][]>(() => [
+  [{
+    label: github.user?.login ?? '',
+    type: 'label' as const,
+    icon: 'i-simple-icons-github'
+  }],
   github.accounts.map(login => ({
     label: login,
     type: 'checkbox' as const,
@@ -28,7 +33,7 @@ const items = computed<DropdownMenuItem[][]>(() => [
       }
     },
     {
-      label: `Sign out ${github.activeAccount ?? ''}`,
+      label: 'Sign out',
       icon: 'i-lucide-log-out',
       onSelect: () => github.logout()
     }
@@ -40,44 +45,43 @@ const items = computed<DropdownMenuItem[][]>(() => [
   <UDropdownMenu
     v-if="github.user"
     :items="items"
-    :content="{ align: 'end' }"
+    :content="{ side: 'right', align: 'end' }"
     :ui="{ content: 'w-52' }"
   >
-    <UButton
-      color="neutral"
-      variant="ghost"
-      size="xs"
-      class="gap-1.5"
+    <button
+      class="flex items-center justify-center rounded-full ring-1 ring-(--ui-border-accented) hover:ring-(--ui-text-dimmed) transition-shadow"
+      :aria-label="github.user.login"
     >
       <UAvatar
         v-if="github.user.avatar_url"
         :src="github.user.avatar_url"
         :alt="github.user.login"
-        size="3xs"
+        size="xs"
       />
       <UIcon
         v-else
         name="i-simple-icons-github"
-        class="size-3.5"
+        class="size-4 m-1.5 text-toned"
       />
-      <span class="text-xs">{{ github.user.login }}</span>
-      <UIcon
-        name="i-lucide-chevron-down"
-        class="size-3 text-dimmed"
-      />
-    </UButton>
+    </button>
   </UDropdownMenu>
 
-  <UButton
+  <UTooltip
     v-else
-    label="Connect GitHub"
-    icon="i-simple-icons-github"
-    color="neutral"
-    variant="outline"
-    size="xs"
-    class="rounded-full"
-    @click="connectOpen = true"
-  />
+    text="Connect GitHub"
+    :content="{ side: 'right' }"
+  >
+    <button
+      class="flex items-center justify-center size-8 rounded-lg text-dimmed hover:text-toned hover:bg-elevated/50 transition-colors"
+      aria-label="Connect GitHub"
+      @click="connectOpen = true"
+    >
+      <UIcon
+        name="i-simple-icons-github"
+        class="size-4"
+      />
+    </button>
+  </UTooltip>
 
   <GithubConnectModal v-model:open="connectOpen" />
 </template>

@@ -83,11 +83,13 @@ const data = computed(() => {
       v-else
       class="flex h-full items-center justify-center"
     >
-      <div class="flex flex-col items-center gap-3 px-10 py-12 rounded-xl border border-default bg-muted">
-        <UIcon
-          name="i-lucide-git-branch"
-          class="size-8 text-dimmed"
-        />
+      <div class="panel-card flex flex-col items-center gap-3 px-12 py-12 rounded-2xl">
+        <div class="flex items-center justify-center size-10 rounded-xl bg-elevated border border-default">
+          <UIcon
+            name="i-lucide-git-branch"
+            class="size-5 text-dimmed"
+          />
+        </div>
         <h2 class="text-base font-medium text-highlighted">
           File Changes
         </h2>

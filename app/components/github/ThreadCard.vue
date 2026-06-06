@@ -93,7 +93,7 @@ async function toggleResolved() {
       <!-- diff context -->
       <pre
         v-if="hunkLines.length"
-        class="text-[11px] font-mono leading-snug overflow-x-auto bg-[#0d0d0d] border-b border-default"
+        class="text-[11px] font-mono leading-snug overflow-x-auto bg-[#0e0e10] border-b border-default"
       ><div
         v-for="(hunkLine, i) in hunkLines"
         :key="i"

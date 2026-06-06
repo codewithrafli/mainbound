@@ -70,23 +70,22 @@ async function submitPr() {
 </script>
 
 <template>
-  <div v-if="github.user && repo">
-    <button
-      class="flex items-center gap-1.5 w-full px-3 pt-4 pb-1.5 text-[10px] font-medium tracking-wider text-dimmed uppercase hover:text-muted"
-      @click="prsOpen = !prsOpen"
-    >
-      <UIcon
-        :name="prsOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
-        class="size-3"
-      />
-      Pull Requests
-      <UBadge
-        color="neutral"
-        variant="soft"
-        size="sm"
+  <div
+    v-if="github.user && repo"
+    class="panel-card overflow-hidden"
+  >
+    <div class="flex items-center gap-1.5 px-3 py-2 section-label border-b border-(--ui-border-muted)">
+      <button
+        class="flex items-center gap-1.5 hover:text-toned"
+        @click="prsOpen = !prsOpen"
       >
-        {{ prs.length }}
-      </UBadge>
+        <UIcon
+          :name="prsOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+          class="size-3"
+        />
+        Pull Requests
+        <span class="font-mono text-dimmed">{{ prs.length }}</span>
+      </button>
       <UButton
         label="New"
         icon="i-lucide-git-pull-request-create"
@@ -96,11 +95,11 @@ async function submitPr() {
         class="ml-auto"
         @click.stop="createOpen = true"
       />
-    </button>
+    </div>
 
     <div
       v-show="prsOpen"
-      class="px-3 pb-2 space-y-2"
+      class="px-3 py-2.5 space-y-2"
     >
       <div
         v-if="github.loadingPrs"
@@ -208,7 +207,8 @@ async function submitPr() {
           />
           <UButton
             label="Create Pull Request"
-            color="primary"
+            color="neutral"
+            variant="solid"
             size="sm"
             block
             :loading="creating"

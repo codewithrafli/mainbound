@@ -5,10 +5,6 @@ import { leavesOf } from '~/stores/terminals'
 const terminals = useTerminalsStore()
 const workspaces = useWorkspacesStore()
 
-function newSession() {
-  terminals.create(workspaces.active?.path ?? null, workspaces.active?.name)
-}
-
 const repoItems = computed<DropdownMenuItem[]>(() =>
   workspaces.repos.map(repo => ({
     label: repo.name,
@@ -33,37 +29,10 @@ function onDragStart(tabId: string, event: DragEvent) {
 </script>
 
 <template>
-  <aside class="flex flex-col w-60 shrink-0 border-r border-default bg-muted">
-    <div class="flex gap-1 p-2">
-      <UButton
-        label="New Session"
-        icon="i-lucide-plus"
-        color="neutral"
-        variant="outline"
-        size="sm"
-        block
-        class="rounded-full flex-1"
-        @click="newSession"
-      />
-      <UDropdownMenu
-        v-if="repoItems.length"
-        :items="repoItems"
-        :content="{ align: 'end' }"
-        :ui="{ content: 'w-64' }"
-      >
-        <UButton
-          icon="i-lucide-chevron-down"
-          color="neutral"
-          variant="outline"
-          size="sm"
-          class="rounded-full"
-          aria-label="New session in repository"
-        />
-      </UDropdownMenu>
-    </div>
-
-    <div class="flex items-center px-3 pt-2 pb-1">
-      <span class="text-[10px] font-medium tracking-wider text-dimmed uppercase">Sessions</span>
+  <aside class="flex flex-col w-56 shrink-0 border-r border-default bg-muted/40">
+    <!-- SESSIONS -->
+    <div class="flex items-center px-3 pt-3 pb-1.5">
+      <span class="section-label">Sessions</span>
       <span class="ml-auto flex items-center">
         <UTooltip text="Split right (⌘D)">
           <UButton
@@ -87,6 +56,20 @@ function onDragStart(tabId: string, event: DragEvent) {
             @click="terminals.split('column')"
           />
         </UTooltip>
+        <UDropdownMenu
+          v-if="repoItems.length"
+          :items="repoItems"
+          :content="{ align: 'end' }"
+          :ui="{ content: 'w-64' }"
+        >
+          <UButton
+            icon="i-lucide-plus"
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            aria-label="New session in repository"
+          />
+        </UDropdownMenu>
       </span>
     </div>
 
@@ -97,10 +80,10 @@ function onDragStart(tabId: string, event: DragEvent) {
         role="button"
         tabindex="0"
         draggable="true"
-        class="group flex items-center w-full gap-2 px-2 py-1.5 rounded-md text-left text-sm cursor-pointer transition-colors"
+        class="group flex items-center w-full gap-2 px-2 py-1.5 rounded-lg text-left text-[13px] cursor-pointer transition-colors"
         :class="[
           tab.id === terminals.activeTabId
-            ? 'bg-elevated text-highlighted'
+            ? 'bg-elevated text-highlighted ring-1 ring-(--ui-border-accented)'
             : 'text-muted hover:bg-elevated/50 hover:text-toned',
           tab.id === terminals.draggingTabId ? 'opacity-50' : ''
         ]"
@@ -119,15 +102,15 @@ function onDragStart(tabId: string, event: DragEvent) {
             <span
               v-if="paneCount(tab) > 1"
               class="text-[10px] text-dimmed"
-            >· {{ paneCount(tab) }} panes</span>
+            >· {{ paneCount(tab) }}</span>
           </span>
           <span
             v-if="tab.branch"
-            class="flex items-center gap-1 text-[11px] text-dimmed leading-tight"
+            class="flex items-center gap-1 text-[10.5px] font-mono text-dimmed leading-tight"
           >
             <UIcon
               name="i-lucide-git-branch"
-              class="size-3"
+              class="size-2.5"
             />
             <span class="truncate">{{ tab.branch }}</span>
           </span>
@@ -150,5 +133,29 @@ function onDragStart(tabId: string, event: DragEvent) {
         No sessions yet.
       </p>
     </nav>
+
+    <!-- workspace card, console-style -->
+    <div class="p-2">
+      <div class="panel-card p-3 space-y-2">
+        <p class="text-[10.5px] text-dimmed">
+          Workspace
+        </p>
+        <p class="text-[13px] font-medium text-highlighted truncate">
+          {{ workspaces.active?.name ?? 'None selected' }}
+        </p>
+        <p
+          v-if="workspaces.repos.length"
+          class="text-[10.5px] font-mono text-muted"
+        >
+          {{ workspaces.repos.length }} repositories
+        </p>
+        <button
+          class="btn-gradient w-full rounded-lg py-1.5 text-[11.5px] font-semibold transition"
+          @click="workspaces.add()"
+        >
+          Add Workspace
+        </button>
+      </div>
+    </div>
   </aside>
 </template>

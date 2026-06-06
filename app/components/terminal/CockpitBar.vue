@@ -50,10 +50,10 @@ const ciSummary = computed(() => {
 </script>
 
 <template>
-  <div class="flex items-center h-7 shrink-0 gap-3 px-3 border-b border-default bg-muted text-[11px] text-muted select-none overflow-x-auto whitespace-nowrap">
+  <div class="flex items-center h-9 shrink-0 gap-1.5 px-3 border-b border-(--ui-border-muted) text-[10.5px] font-mono text-muted select-none overflow-x-auto whitespace-nowrap">
     <template v-if="cockpit.status">
-      <!-- branch -->
-      <span class="flex items-center gap-1 text-toned">
+      <!-- branch chip -->
+      <span class="flex items-center gap-1.5 rounded-full border border-(--ui-border) bg-muted/60 px-2.5 py-1 text-toned">
         <UIcon
           name="i-lucide-git-branch"
           class="size-3"
@@ -61,10 +61,10 @@ const ciSummary = computed(() => {
         {{ cockpit.status.branch ?? 'detached' }}
       </span>
 
-      <!-- local changes -->
+      <!-- changes chip -->
       <button
-        class="flex items-center gap-1 hover:text-highlighted transition-colors"
-        :class="cockpit.changeCount ? 'text-amber-400' : ''"
+        class="flex items-center gap-1.5 rounded-full border border-(--ui-border) px-2.5 py-1 transition-colors hover:bg-elevated"
+        :class="cockpit.changeCount ? 'text-amber-400 border-amber-400/20' : 'text-dimmed'"
         title="Open File Changes (⌘2)"
         @click="openChanges"
       >
@@ -75,8 +75,8 @@ const ciSummary = computed(() => {
         {{ cockpit.changeCount ? `${cockpit.changeCount} changed` : 'clean' }}
       </button>
 
-      <!-- ahead / behind + sync -->
-      <span class="flex items-center gap-1">
+      <!-- sync chip -->
+      <span class="flex items-center gap-1 rounded-full border border-(--ui-border) px-2.5 py-1">
         <span
           v-if="cockpit.status.ahead"
           class="text-green-500"
@@ -96,7 +96,7 @@ const ciSummary = computed(() => {
           color="neutral"
           variant="ghost"
           size="xs"
-          class="-my-1"
+          class="-my-1.5 -mr-1"
           aria-label="Pull"
           :loading="github.syncing === 'pull'"
           @click="doPull"
@@ -107,7 +107,7 @@ const ciSummary = computed(() => {
           color="neutral"
           variant="ghost"
           size="xs"
-          class="-my-1"
+          class="-my-1.5 -mr-1"
           aria-label="Push"
           :loading="github.syncing === 'push'"
           @click="doPush"
@@ -117,7 +117,7 @@ const ciSummary = computed(() => {
       <!-- conflicts -->
       <span
         v-if="cockpit.status.conflicts.length"
-        class="flex items-center gap-1 text-orange-500"
+        class="flex items-center gap-1.5 rounded-full border border-orange-500/30 px-2.5 py-1 text-orange-400"
       >
         <UIcon
           name="i-lucide-triangle-alert"
@@ -131,7 +131,7 @@ const ciSummary = computed(() => {
       <!-- PR + reviews + CI -->
       <template v-if="cockpit.pr">
         <button
-          class="flex items-center gap-1.5 hover:text-highlighted transition-colors"
+          class="flex items-center gap-1.5 rounded-full border border-(--ui-border) px-2.5 py-1 transition-colors hover:bg-elevated"
           title="Open pull request"
           @click="openPr"
         >
@@ -141,12 +141,12 @@ const ciSummary = computed(() => {
             :class="cockpit.pr.draft ? 'text-dimmed' : 'text-green-500'"
           />
           <span class="text-toned">#{{ cockpit.pr.number }}</span>
-          <span class="max-w-48 truncate">{{ cockpit.pr.title }}</span>
+          <span class="max-w-44 truncate">{{ cockpit.pr.title }}</span>
         </button>
 
         <span
           v-if="cockpit.reviews"
-          class="flex items-center gap-1.5"
+          class="flex items-center gap-1.5 rounded-full border border-(--ui-border) px-2.5 py-1"
           title="Reviews: approved / changes requested / commented"
         >
           <span
@@ -169,7 +169,7 @@ const ciSummary = computed(() => {
 
         <span
           v-if="ciSummary"
-          class="flex items-center gap-1"
+          class="flex items-center gap-1.5 rounded-full border border-(--ui-border) px-2.5 py-1"
           :class="ciSummary.color"
           title="CI checks passed/total"
         >
@@ -183,7 +183,7 @@ const ciSummary = computed(() => {
 
       <span
         v-else-if="github.user"
-        class="text-dimmed"
+        class="text-dimmed px-1"
       >no open PR</span>
 
       <UButton
@@ -191,7 +191,6 @@ const ciSummary = computed(() => {
         color="neutral"
         variant="ghost"
         size="xs"
-        class="-my-1"
         aria-label="Refresh cockpit"
         :loading="cockpit.refreshing"
         @click="cockpit.refresh()"

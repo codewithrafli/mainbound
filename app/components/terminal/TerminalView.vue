@@ -246,7 +246,7 @@ const dropOverlayStyle = computed(() => {
 
       <div
         ref="area"
-        class="relative flex-1 min-h-0 bg-[#0d0d0d]"
+        class="relative flex-1 min-h-0 bg-[#0e0e10]"
         :class="dragging ? 'select-none' : ''"
         @dragover="onDragOver"
         @dragleave="onDragLeave"
@@ -329,11 +329,13 @@ const dropOverlayStyle = computed(() => {
           v-if="!terminals.tabs.length"
           class="absolute inset-0 flex items-center justify-center"
         >
-          <div class="text-center space-y-2">
-            <UIcon
-              name="i-lucide-terminal"
-              class="size-8 text-dimmed"
-            />
+          <div class="panel-card flex flex-col items-center gap-3 px-12 py-12 rounded-2xl">
+            <div class="flex items-center justify-center size-10 rounded-xl bg-elevated border border-default">
+              <UIcon
+                name="i-lucide-terminal"
+                class="size-5 text-dimmed"
+              />
+            </div>
             <p class="text-sm text-muted">
               No open sessions
             </p>
@@ -341,9 +343,8 @@ const dropOverlayStyle = computed(() => {
               label="New Session"
               icon="i-lucide-plus"
               color="neutral"
-              variant="outline"
+              variant="solid"
               size="sm"
-              class="rounded-full"
               @click="terminals.create(workspaces.active?.path ?? null, workspaces.active?.name)"
             />
           </div>

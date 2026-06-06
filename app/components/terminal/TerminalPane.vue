@@ -29,7 +29,7 @@ onMounted(async () => {
     fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
     lineHeight: 1.35,
     theme: {
-      background: '#0d0d0d',
+      background: '#0e0e10',
       foreground: '#cccccc',
       cursor: '#cccccc',
       selectionBackground: '#264f78',
@@ -76,6 +76,15 @@ onMounted(async () => {
     invoke('pty_resize', { id: props.sessionId, cols, rows })
   })
 
+  // Layout may settle a frame after mount (fonts, frame chrome) and
+  // term.onResize only fires when dims CHANGE — force one authoritative
+  // sync so the PTY always matches the rendered geometry.
+  requestAnimationFrame(() => {
+    if (!term || !fit) return
+    fit.fit()
+    invoke('pty_resize', { id: props.sessionId, cols: term.cols, rows: term.rows })
+  })
+
   // Refit on container resize — also fires when the pane becomes
   // visible again after a v-show toggle
   resizeObserver = new ResizeObserver(() => {
@@ -100,8 +109,11 @@ defineExpose({ focus })
 </script>
 
 <template>
-  <div
-    ref="el"
-    class="h-full w-full bg-[#0d0d0d]"
-  />
+  <!-- padding on the wrapper so FitAddon measures the host correctly -->
+  <div class="h-full w-full bg-[#0e0e10] px-3 py-2">
+    <div
+      ref="el"
+      class="h-full w-full"
+    />
+  </div>
 </template>

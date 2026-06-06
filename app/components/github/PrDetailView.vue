@@ -370,7 +370,8 @@ const stateBadge = computed(() => {
         <div class="flex justify-end">
           <UButton
             label="Comment"
-            color="primary"
+            color="neutral"
+            variant="solid"
             size="xs"
             :loading="commenting"
             :disabled="!newComment.trim()"
