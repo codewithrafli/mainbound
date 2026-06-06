@@ -11,11 +11,15 @@ const ui = useUiStore()
 const terminals = useTerminalsStore()
 const workspaces = useWorkspacesStore()
 const notifications = useNotificationsStore()
+const updater = useUpdaterStore()
 
 let unlistenMenu: UnlistenFn | undefined
 
 onMounted(async () => {
   notifications.init()
+  updater.init()
+  // silent auto-check shortly after launch
+  setTimeout(() => updater.check(false), 5_000)
   unlistenMenu = await listen<string>('menu://action', ({ payload }) => {
     switch (payload) {
       case 'new-session':
@@ -39,6 +43,9 @@ onMounted(async () => {
       case 'view-changes':
         ui.view = 'changes'
         break
+      case 'check-updates':
+        updater.check(true)
+        break
     }
   })
 })
@@ -49,5 +56,6 @@ onBeforeUnmount(() => unlistenMenu?.())
 <template>
   <UApp>
     <NuxtPage />
+    <UpdateModal />
   </UApp>
 </template>

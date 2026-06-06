@@ -16,6 +16,7 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
   let app_menu = SubmenuBuilder::new(app, "Mainbound")
     .about(None)
     .separator()
+    .item(&MenuItemBuilder::with_id("check-updates", "Check for Updates…").build(app)?)
     .item(&MenuItemBuilder::with_id("notify-test", "Test Notification").build(app)?)
     .separator()
     .services()
@@ -138,6 +139,8 @@ pub fn run() {
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_notification::init())
+    .plugin(tauri_plugin_process::init())
+    .plugin(tauri_plugin_updater::Builder::new().build())
     .plugin(tauri_plugin_window_state::Builder::default().build())
     .manage(AppState::new())
     .invoke_handler(tauri::generate_handler![
