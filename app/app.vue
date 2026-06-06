@@ -2,7 +2,7 @@
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
 useHead({
-  title: 'tide',
+  title: 'Mainbound',
   htmlAttrs: { lang: 'en' }
 })
 

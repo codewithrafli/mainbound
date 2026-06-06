@@ -1,7 +1,7 @@
 [package]
-name = "tide"
+name = "mainbound"
 version = "0.1.0"
-description = "A terminal workspace for parallel coding sessions"
+description = "Mainbound — from shell to main. Terminal, Git, and pull requests together."
 authors = ["Rully Ardiansyah"]
 edition = "2021"
 rust-version = "1.77.2"

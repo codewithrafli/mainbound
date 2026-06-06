@@ -12,7 +12,7 @@ use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::Emitter;
 
 fn build_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
-  let app_menu = SubmenuBuilder::new(app, "tide")
+  let app_menu = SubmenuBuilder::new(app, "Mainbound")
     .about(None)
     .separator()
     .services()

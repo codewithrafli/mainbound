@@ -78,7 +78,7 @@ pub fn pty_spawn(
     if std::env::var("LANG").is_err() {
         cmd.env("LANG", "en_US.UTF-8");
     }
-    cmd.env("TERM_PROGRAM", "tide");
+    cmd.env("TERM_PROGRAM", "mainbound");
 
     let child = pair
         .slave

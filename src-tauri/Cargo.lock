@@ -2206,6 +2206,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "mainbound"
+version = "0.1.0"
+dependencies = [
+ "dirs 5.0.1",
+ "keyring",
+ "log",
+ "parking_lot",
+ "portable-pty",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-log",
+ "tauri-plugin-notification",
+ "tauri-plugin-opener",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
 name = "markup5ever"
 version = "0.38.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4461,28 +4483,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
-]
-
-[[package]]
-name = "tide"
-version = "0.1.0"
-dependencies = [
- "dirs 5.0.1",
- "keyring",
- "log",
- "parking_lot",
- "portable-pty",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-log",
- "tauri-plugin-notification",
- "tauri-plugin-opener",
- "thiserror 2.0.18",
- "uuid",
 ]
 
 [[package]]
