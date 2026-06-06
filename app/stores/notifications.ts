@@ -70,14 +70,10 @@ export const useNotificationsStore = defineStore('notifications', () => {
     if (tab) {
       unreadByTab.value[tab.id] = (unreadByTab.value[tab.id] ?? 0) + 1
     }
-    if (granted.value) {
-      try {
-        const { sendNotification } = await import('@tauri-apps/plugin-notification')
-        sendNotification({ title, body })
-      } catch {
-        // notification center unavailable — badge already set
-      }
-    }
+    // dispatch via Rust: notification plugin with osascript fallback —
+    // never gated on a cached permission snapshot
+    const { invoke } = await import('@tauri-apps/api/core')
+    invoke('notify', { title, body }).catch(() => {})
   }
 
   function sessionLabel(sessionId: string): string {

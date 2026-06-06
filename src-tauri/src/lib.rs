@@ -1,5 +1,6 @@
 mod ai;
 mod error;
+mod notify;
 mod git;
 mod github;
 mod pty;
@@ -14,6 +15,8 @@ use tauri::Emitter;
 fn build_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
   let app_menu = SubmenuBuilder::new(app, "Mainbound")
     .about(None)
+    .separator()
+    .item(&MenuItemBuilder::with_id("notify-test", "Test Notification").build(app)?)
     .separator()
     .services()
     .separator()
@@ -99,6 +102,9 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
   app.on_menu_event(|app, event| {
     let id = event.id().0.as_str();
     match id {
+      "notify-test" => {
+        notify::send(app, "Mainbound", "Notifications are working 🎉");
+      }
       // zoom is handled natively — no webview round-trip needed
       "zoom-in" | "zoom-out" | "zoom-reset" => {
         use tauri::Manager;
@@ -137,6 +143,7 @@ pub fn run() {
     .invoke_handler(tauri::generate_handler![
       ai::ai_commit_message,
       ai::ai_pr_message,
+      notify::notify,
       pty::pty_spawn,
       pty::pty_write,
       pty::pty_resize,
