@@ -2,6 +2,7 @@
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
+import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
@@ -23,6 +24,8 @@ const unlisteners: UnlistenFn[] = []
 
 onMounted(async () => {
   term = new Terminal({
+    // required by the unicode11 addon
+    allowProposedApi: true,
     cursorBlink: true,
     scrollback: 10_000,
     fontSize: 12.5,
@@ -39,6 +42,10 @@ onMounted(async () => {
   })
   fit = new FitAddon()
   term.loadAddon(fit)
+  // match zsh's wcwidth: emoji & friends count as 2 cells, otherwise
+  // p10k-style prompts position the cursor past the rendered text
+  term.loadAddon(new Unicode11Addon())
+  term.unicode.activeVersion = '11'
   term.open(el.value!)
   try {
     term.loadAddon(new WebglAddon())

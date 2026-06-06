@@ -71,6 +71,10 @@ pub fn pty_spawn(
     cmd.cwd(&cwd);
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
+    // xterm.js renderer — prompts like powerlevel10k tune their icon
+    // width assumptions per terminal; vscode uses the same renderer,
+    // so its profile matches how we actually render glyph widths
+    cmd.env("TERM_PROGRAM", "vscode");
 
     let child = pair
         .slave
