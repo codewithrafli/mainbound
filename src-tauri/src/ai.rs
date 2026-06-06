@@ -1,11 +1,30 @@
 use std::io::Write;
 use std::process::{Command, Stdio};
+use std::{env, fs};
 
 use serde::Serialize;
+use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
 
 const MAX_DIFF_CHARS: usize = 12_000;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AiProvider {
+    Claude,
+    Codex,
+}
+
+impl AiProvider {
+    fn parse(value: Option<String>) -> Self {
+        let normalized = value.map(|v| v.trim().to_ascii_lowercase());
+        match normalized.as_deref() {
+            Some("codex") => Self::Codex,
+            Some("claude") | Some("") | None => Self::Claude,
+            Some(_) => Self::Claude,
+        }
+    }
+}
 
 #[derive(Serialize, Clone)]
 pub struct CommitSuggestion {
@@ -26,6 +45,10 @@ fn run_git(repo: &str, args: &[&str]) -> AppResult<String> {
         ));
     }
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\"'\"'"))
 }
 
 /// Runs the user's `claude` CLI with the prompt on stdin. Spawned via a
@@ -63,6 +86,55 @@ fn run_claude(repo: &str, prompt: &str) -> AppResult<String> {
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
+fn run_codex(repo: &str, prompt: &str) -> AppResult<String> {
+    let out_path = env::temp_dir().join(format!("mainbound-codex-{}.txt", Uuid::new_v4()));
+    let command = format!(
+        "codex exec --output-last-message {}",
+        shell_quote(out_path.to_string_lossy().as_ref())
+    );
+
+    let mut child = Command::new("/bin/zsh")
+        .args(["-lc", &command])
+        .current_dir(repo)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| AppError::Pty(format!("failed to start shell: {e}")))?;
+
+    child
+        .stdin
+        .take()
+        .ok_or_else(|| AppError::Pty("failed to open codex stdin".into()))?
+        .write_all(prompt.as_bytes())?;
+
+    let output = child
+        .wait_with_output()
+        .map_err(|e| AppError::Pty(format!("codex failed: {e}")))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("command not found") {
+            return Err(AppError::Pty(
+                "codex CLI not found — install Codex or add it to PATH".into(),
+            ));
+        }
+        return Err(AppError::Pty(format!("codex: {}", stderr.trim())));
+    }
+
+    let raw = fs::read_to_string(&out_path)
+        .map_err(|e| AppError::Pty(format!("failed to read codex output: {e}")))?;
+    let _ = fs::remove_file(&out_path);
+    Ok(raw)
+}
+
+fn run_ai_cli(provider: AiProvider, repo: &str, prompt: &str) -> AppResult<String> {
+    match provider {
+        AiProvider::Claude => run_claude(repo, prompt),
+        AiProvider::Codex => run_codex(repo, prompt),
+    }
+}
+
 /// Pulls the first JSON object out of the model output (tolerates prose
 /// or markdown code fences around it).
 fn extract_json(raw: &str) -> Option<serde_json::Value> {
@@ -78,8 +150,9 @@ pub struct PrSuggestion {
 }
 
 #[tauri::command]
-pub async fn ai_pr_message(repo: String, base: String) -> AppResult<PrSuggestion> {
+pub async fn ai_pr_message(repo: String, base: String, provider: Option<String>) -> AppResult<PrSuggestion> {
     tauri::async_runtime::spawn_blocking(move || {
+        let provider = AiProvider::parse(provider);
         // base may only exist on the remote
         let base_ref = if run_git(&repo, &["rev-parse", "--verify", &base]).is_ok() {
             base.clone()
@@ -112,7 +185,7 @@ pub async fn ai_pr_message(repo: String, base: String) -> AppResult<PrSuggestion
              Commits on this branch:\n{commits}\n\nFile stats:\n{stat}\n\nDiff (may be truncated):\n{diff}"
         );
 
-        let raw = run_claude(&repo, &prompt)?;
+        let raw = run_ai_cli(provider, &repo, &prompt)?;
         let json = extract_json(&raw)
             .ok_or_else(|| AppError::Pty(format!("unexpected AI output: {}", raw.trim())))?;
         let title = json["title"].as_str().unwrap_or_default().trim().to_string();
@@ -129,8 +202,9 @@ pub async fn ai_pr_message(repo: String, base: String) -> AppResult<PrSuggestion
 }
 
 #[tauri::command]
-pub async fn ai_commit_message(repo: String) -> AppResult<CommitSuggestion> {
+pub async fn ai_commit_message(repo: String, provider: Option<String>) -> AppResult<CommitSuggestion> {
     tauri::async_runtime::spawn_blocking(move || {
+        let provider = AiProvider::parse(provider);
         let stat = run_git(&repo, &["diff", "--cached", "--stat"])?;
         if stat.trim().is_empty() {
             return Err(AppError::Pty(
@@ -156,7 +230,7 @@ pub async fn ai_commit_message(repo: String) -> AppResult<CommitSuggestion> {
              File stats:\n{stat}\n\nDiff (may be truncated):\n{diff}"
         );
 
-        let raw = run_claude(&repo, &prompt)?;
+        let raw = run_ai_cli(provider, &repo, &prompt)?;
         let json = extract_json(&raw)
             .ok_or_else(|| AppError::Pty(format!("unexpected AI output: {}", raw.trim())))?;
         let summary = json["summary"].as_str().unwrap_or_default().trim().to_string();

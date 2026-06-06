@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 
 const git = useGitStore()
 const github = useGithubStore()
+const { settings } = storeToRefs(useSettingsStore())
 
 const prsOpen = ref(true)
 const createOpen = ref(false)
@@ -37,7 +38,8 @@ async function generateWithAi() {
   try {
     const suggestion = await invoke<{ title: string, body: string }>('ai_pr_message', {
       repo: repo.value,
-      base: base.value.trim() || 'main'
+      base: base.value.trim() || 'main',
+      provider: settings.value.aiProvider
     })
     title.value = suggestion.title
     body.value = suggestion.body

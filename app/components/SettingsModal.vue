@@ -54,6 +54,34 @@ const updater = useUpdaterStore()
 
         <USeparator />
 
+        <!-- AI -->
+        <div class="space-y-3">
+          <p class="section-label">
+            AI
+          </p>
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <p class="text-[13px] text-toned">
+                Provider
+              </p>
+              <p class="text-[11px] text-dimmed">
+                Used for “Generate with AI” in commits and PRs
+              </p>
+            </div>
+            <USelect
+              v-model="settings.aiProvider"
+              :items="[
+                { label: 'Claude Code', value: 'claude' },
+                { label: 'Codex', value: 'codex' }
+              ]"
+              size="sm"
+              class="w-36"
+            />
+          </div>
+        </div>
+
+        <USeparator />
+
         <!-- notifications -->
         <div class="space-y-3">
           <p class="section-label">

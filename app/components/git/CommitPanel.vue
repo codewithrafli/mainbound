@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 
 const git = useGitStore()
 const github = useGithubStore()
+const { settings } = storeToRefs(useSettingsStore())
 
 async function doPush() {
   if (!git.selectedRepo) return
@@ -40,7 +41,7 @@ async function generateWithAi() {
   try {
     const suggestion = await invoke<{ summary: string, description: string }>(
       'ai_commit_message',
-      { repo: git.selectedRepo }
+      { repo: git.selectedRepo, provider: settings.value.aiProvider }
     )
     summary.value = suggestion.summary
     description.value = suggestion.description
@@ -188,7 +189,7 @@ async function generateWithAi() {
                 :disabled="!git.status.staged.length || generating"
                 @click="generateWithAi"
               />
-              <span class="text-[10px] text-dimmed">⌘↵</span>
+              <span class="text-[10px] text-dimmed">{{ settings.aiProvider === 'codex' ? 'Codex' : 'Claude' }} · ⌘↵</span>
             </div>
             <UAlert
               v-if="aiError"
