@@ -40,6 +40,7 @@ export default defineNuxtConfig({
         '@tauri-apps/api/core',
         '@tauri-apps/api/event',
         '@tauri-apps/plugin-dialog',
+        '@tauri-apps/plugin-notification',
         '@tauri-apps/plugin-opener',
         '@xterm/xterm',
         '@xterm/addon-fit',

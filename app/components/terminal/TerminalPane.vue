@@ -15,6 +15,7 @@ const emit = defineEmits<{
   exited: [code: number]
 }>()
 
+const notifications = useNotificationsStore()
 const el = ref<HTMLDivElement>()
 
 let term: Terminal | undefined
@@ -54,10 +55,24 @@ onMounted(async () => {
   }
   fit.fit()
 
+  // notification signals: bell + explicit OSC notifications
+  term.onBell(() => notifications.onBell(props.sessionId))
+  term.parser.registerOscHandler(9, (data) => {
+    notifications.onOscNotify(props.sessionId, '', data)
+    return true
+  })
+  term.parser.registerOscHandler(777, (data) => {
+    // urxvt format: notify;title;body
+    const [kind, title, ...rest] = data.split(';')
+    if (kind === 'notify') notifications.onOscNotify(props.sessionId, title ?? '', rest.join(';'))
+    return true
+  })
+
   // Listeners BEFORE spawn so the first prompt bytes aren't lost
   unlisteners.push(
     await listen<string>(`pty://data/${props.sessionId}`, (e) => {
       term?.write(e.payload)
+      notifications.onOutput(props.sessionId)
     }),
     await listen<{ id: string, code: number }>(`pty://exit/${props.sessionId}`, (e) => {
       emit('exited', e.payload.code)
@@ -105,6 +120,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()
   unlisteners.forEach(off => off())
+  notifications.forget(props.sessionId)
   term?.dispose()
 })
 
