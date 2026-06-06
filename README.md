@@ -17,12 +17,21 @@ Built with **Tauri 2 + Nuxt 4 + Nuxt UI**.
 - **File Changes** — git status with M/U/A/D badges and ±line counts, syntax-highlighted diffs, stage/unstage, commit with summary + description, history, conflict detection
 - **GitHub** — push/pull (via your local git credentials), open PR list with CI status, create PRs. Auth via PAT or OAuth device flow; token stored in the macOS Keychain and never exposed to the UI layer
 
-## Download
+## Install
 
-Grab the latest `.dmg` from [**Releases**](https://github.com/codewithrafli/mainbound/releases/latest) (Apple Silicon & Intel).
+**Recommended — one line, no Gatekeeper drama:**
 
-> First launch: the app isn't notarized yet — right-click → Open, or run
-> `xattr -dr com.apple.quarantine /Applications/Mainbound.app`.
+```bash
+curl -fsSL https://raw.githubusercontent.com/codewithrafli/mainbound/main/install.sh | bash
+```
+
+Or grab the `.dmg` from [**Releases**](https://github.com/codewithrafli/mainbound/releases/latest)
+(Apple Silicon & Intel). Browser downloads aren't notarized yet, so after
+installing run:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Mainbound.app
+```
 
 Mainbound checks for updates automatically and installs them in-app
 (menu **Mainbound → Check for Updates…**), with the changelog shown
