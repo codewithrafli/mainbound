@@ -9,13 +9,13 @@
       class="h-12 w-full shrink-0"
     />
 
-    <!-- logo glyph -->
-    <div class="flex items-center justify-center size-8 rounded-lg bg-elevated border border-default">
-      <UIcon
-        name="i-lucide-waves"
-        class="size-4 text-toned"
-      />
-    </div>
+    <!-- brand logo -->
+    <img
+      src="/mainbound-logo.svg"
+      alt="Mainbound"
+      class="size-8 rounded-lg ring-1 ring-(--ui-border)"
+      draggable="false"
+    >
 
     <div
       data-tauri-drag-region
