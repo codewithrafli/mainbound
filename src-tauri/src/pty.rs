@@ -71,10 +71,14 @@ pub fn pty_spawn(
     cmd.cwd(&cwd);
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
-    // xterm.js renderer — prompts like powerlevel10k tune their icon
-    // width assumptions per terminal; vscode uses the same renderer,
-    // so its profile matches how we actually render glyph widths
-    cmd.env("TERM_PROGRAM", "vscode");
+    // GUI apps don't inherit a locale on macOS. Without a UTF-8 LANG,
+    // zsh falls back to the C locale and counts each BYTE of multibyte
+    // glyphs as one cell — prompt frameworks (oh-my-posh, p10k) then
+    // misplace the cursor and right-aligned segments.
+    if std::env::var("LANG").is_err() {
+        cmd.env("LANG", "en_US.UTF-8");
+    }
+    cmd.env("TERM_PROGRAM", "tide");
 
     let child = pair
         .slave

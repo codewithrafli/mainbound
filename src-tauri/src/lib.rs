@@ -71,6 +71,22 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
         .build(app)?,
     )
     .separator()
+    .item(
+      &MenuItemBuilder::with_id("zoom-in", "Zoom In")
+        .accelerator("CmdOrCtrl+=")
+        .build(app)?,
+    )
+    .item(
+      &MenuItemBuilder::with_id("zoom-out", "Zoom Out")
+        .accelerator("CmdOrCtrl+-")
+        .build(app)?,
+    )
+    .item(
+      &MenuItemBuilder::with_id("zoom-reset", "Reset Zoom")
+        .accelerator("CmdOrCtrl+0")
+        .build(app)?,
+    )
+    .separator()
     .fullscreen()
     .build()?;
 
@@ -81,7 +97,27 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
     .build()?;
   app.set_menu(menu)?;
   app.on_menu_event(|app, event| {
-    let _ = app.emit("menu://action", event.id().0.clone());
+    let id = event.id().0.as_str();
+    match id {
+      // zoom is handled natively — no webview round-trip needed
+      "zoom-in" | "zoom-out" | "zoom-reset" => {
+        use tauri::Manager;
+        if let Some(state) = app.try_state::<AppState>() {
+          let mut zoom = state.zoom.lock();
+          *zoom = match id {
+            "zoom-in" => (*zoom + 0.1).min(3.0),
+            "zoom-out" => (*zoom - 0.1).max(0.5),
+            _ => 1.0,
+          };
+          if let Some(window) = app.get_webview_window("main") {
+            let _ = window.set_zoom(*zoom);
+          }
+        }
+      }
+      _ => {
+        let _ = app.emit("menu://action", id.to_string());
+      }
+    }
   });
   Ok(())
 }
