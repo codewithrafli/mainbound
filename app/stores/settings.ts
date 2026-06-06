@@ -5,6 +5,8 @@ export interface AppSettings {
   fontSize: number
   /** custom shell path; empty = $SHELL */
   shell: string
+  /** AI provider used for commit and PR generation */
+  aiProvider: 'claude' | 'codex'
   /** seconds of sustained output before "command finished" fires */
   notifMinBurst: number
   /** silent update check on launch */
@@ -14,6 +16,7 @@ export interface AppSettings {
 const DEFAULTS: AppSettings = {
   fontSize: 12.5,
   shell: '',
+  aiProvider: 'claude',
   notifMinBurst: 10,
   autoUpdateCheck: true
 }
