@@ -16,6 +16,7 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
   let app_menu = SubmenuBuilder::new(app, "Mainbound")
     .about(None)
     .separator()
+    .item(&MenuItemBuilder::with_id("check-updates", "Check for Updates…").build(app)?)
     .item(&MenuItemBuilder::with_id("notify-test", "Test Notification").build(app)?)
     .separator()
     .services()
@@ -71,6 +72,12 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
     .item(
       &MenuItemBuilder::with_id("view-changes", "File Changes")
         .accelerator("CmdOrCtrl+2")
+        .build(app)?,
+    )
+    .separator()
+    .item(
+      &MenuItemBuilder::with_id("command-palette", "Command Palette")
+        .accelerator("CmdOrCtrl+K")
         .build(app)?,
     )
     .separator()
@@ -138,6 +145,8 @@ pub fn run() {
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_notification::init())
+    .plugin(tauri_plugin_process::init())
+    .plugin(tauri_plugin_updater::Builder::new().build())
     .plugin(tauri_plugin_window_state::Builder::default().build())
     .manage(AppState::new())
     .invoke_handler(tauri::generate_handler![
@@ -151,6 +160,8 @@ pub fn run() {
       pty::pty_list,
       git::git_branch,
       git::git_repo_root,
+      git::git_branches,
+      git::git_checkout,
       git::git_discard,
       git::git_status,
       git::git_diff,
@@ -174,6 +185,7 @@ pub fn run() {
       github::gh_pr_for_branch,
       github::gh_pr_reviews,
       github::gh_pr_detail,
+      github::gh_pr_files,
       github::gh_pr_comment,
       github::gh_pr_reply_thread,
       github::gh_pr_resolve_thread,

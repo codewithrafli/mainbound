@@ -1,8 +1,64 @@
 <script setup lang="ts">
+import { invoke } from '@tauri-apps/api/core'
+import type { DropdownMenuItem } from '@nuxt/ui'
+
 const ui = useUiStore()
 const git = useGitStore()
 const github = useGithubStore()
 const cockpit = useCockpitStore()
+const toast = useToast()
+
+// --- branch switcher ------------------------------------------------------
+
+interface BranchInfo {
+  name: string
+  current: boolean
+}
+
+const branches = ref<BranchInfo[]>([])
+const newBranchOpen = ref(false)
+const newBranchName = ref('')
+const switching = ref(false)
+
+async function loadBranches(open: boolean) {
+  if (!open || !cockpit.activeRepo) return
+  branches.value = await invoke<BranchInfo[]>('git_branches', { repo: cockpit.activeRepo })
+    .catch(() => [])
+}
+
+async function checkout(branch: string, create = false) {
+  if (!cockpit.activeRepo || switching.value) return
+  switching.value = true
+  try {
+    await invoke('git_checkout', { repo: cockpit.activeRepo, branch, create })
+    newBranchOpen.value = false
+    newBranchName.value = ''
+    await cockpit.refresh()
+  } catch (e) {
+    // surface the real git error, per UX principles
+    toast.add({ title: 'Checkout failed', description: String(e), color: 'error', icon: 'i-lucide-git-branch' })
+  } finally {
+    switching.value = false
+  }
+}
+
+const branchItems = computed<DropdownMenuItem[][]>(() => [
+  branches.value.map(b => ({
+    label: b.name,
+    type: 'checkbox' as const,
+    checked: b.current,
+    onSelect: () => {
+      if (!b.current) checkout(b.name)
+    }
+  })),
+  [{
+    label: 'New branch…',
+    icon: 'i-lucide-git-branch-plus',
+    onSelect: () => {
+      newBranchOpen.value = true
+    }
+  }]
+])
 
 // poll PR/CI/review state while a PR exists (light, GH only)
 let timer: ReturnType<typeof setInterval> | undefined
@@ -52,14 +108,59 @@ const ciSummary = computed(() => {
 <template>
   <div class="flex items-center h-9 shrink-0 gap-1.5 px-3 border-b border-(--ui-border-muted) text-[10.5px] font-mono text-muted select-none overflow-x-auto whitespace-nowrap">
     <template v-if="cockpit.status">
-      <!-- branch chip -->
-      <span class="flex items-center gap-1.5 rounded-full border border-(--ui-border) bg-muted/60 px-2.5 py-1 text-toned">
-        <UIcon
-          name="i-lucide-git-branch"
-          class="size-3"
-        />
-        {{ cockpit.status.branch ?? 'detached' }}
-      </span>
+      <!-- branch switcher -->
+      <UDropdownMenu
+        :items="branchItems"
+        :content="{ align: 'start' }"
+        :ui="{ content: 'w-60 max-h-72 overflow-y-auto' }"
+        @update:open="loadBranches"
+      >
+        <button class="flex items-center gap-1.5 rounded-full border border-(--ui-border) bg-muted/60 px-2.5 py-1 text-toned hover:bg-elevated transition-colors">
+          <UIcon
+            :name="switching ? 'i-lucide-loader-circle' : 'i-lucide-git-branch'"
+            class="size-3"
+            :class="switching ? 'animate-spin' : ''"
+          />
+          {{ cockpit.status.branch ?? 'detached' }}
+          <UIcon
+            name="i-lucide-chevron-down"
+            class="size-2.5 text-dimmed"
+          />
+        </button>
+      </UDropdownMenu>
+
+      <!-- new branch -->
+      <UModal
+        v-model:open="newBranchOpen"
+        title="New Branch"
+        :ui="{ content: 'max-w-sm' }"
+      >
+        <template #body>
+          <div class="space-y-2">
+            <p class="text-xs text-muted">
+              Create from <span class="font-mono text-toned">{{ cockpit.status?.branch }}</span> and switch to it.
+            </p>
+            <UInput
+              v-model="newBranchName"
+              placeholder="feat/my-branch"
+              size="sm"
+              class="w-full font-mono"
+              autofocus
+              @keydown.enter="newBranchName.trim() && checkout(newBranchName.trim(), true)"
+            />
+            <UButton
+              label="Create & Switch"
+              color="neutral"
+              variant="solid"
+              size="sm"
+              block
+              :loading="switching"
+              :disabled="!newBranchName.trim()"
+              @click="checkout(newBranchName.trim(), true)"
+            />
+          </div>
+        </template>
+      </UModal>
 
       <!-- changes chip -->
       <button

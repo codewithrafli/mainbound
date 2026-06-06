@@ -2,6 +2,7 @@
 const terminals = useTerminalsStore()
 const git = useGitStore()
 const github = useGithubStore()
+const updater = useUpdaterStore()
 
 const branchInfo = computed(() => {
   const s = git.status
@@ -54,6 +55,22 @@ const branchInfo = computed(() => {
         />
         {{ github.user.login }}
       </span>
+      <!-- update available: amber, clickable -->
+      <button
+        v-if="updater.available"
+        class="flex items-center gap-1 text-amber-400 hover:text-amber-300 transition-colors"
+        @click="updater.modalOpen = true"
+      >
+        <UIcon
+          name="i-lucide-arrow-up-circle"
+          class="size-3"
+        />
+        Update v{{ updater.newVersion }}
+      </button>
+      <span
+        v-else-if="updater.currentVersion"
+        class="text-dimmed"
+      >v{{ updater.currentVersion }}</span>
       <span class="flex items-center gap-1.5">
         <span class="size-1.5 rounded-full bg-green-500" />
         Ready

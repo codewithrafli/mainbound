@@ -75,6 +75,14 @@ export interface CheckRun {
   url: string | null
 }
 
+export interface PrFile {
+  filename: string
+  status: string
+  additions: number
+  deletions: number
+  patch: string | null
+}
+
 export interface PrDetail {
   number: number
   title: string
@@ -205,6 +213,27 @@ export const useGithubStore = defineStore('github', () => {
   const prDetail = ref<PrDetail | null>(null)
   const prDetailRepo = ref<string | null>(null)
   const loadingDetail = ref(false)
+  const prFiles = ref<PrFile[] | null>(null)
+  const loadingFiles = ref(false)
+
+  /** Lazy: only fetched when the Files tab is opened. */
+  async function loadPrFiles() {
+    if (!prDetail.value || !prDetailRepo.value || loadingFiles.value) return
+    const remote = await remoteInfo(prDetailRepo.value)
+    if (!remote) return
+    loadingFiles.value = true
+    try {
+      prFiles.value = await invoke<PrFile[]>('gh_pr_files', {
+        owner: remote.owner,
+        name: remote.name,
+        number: prDetail.value.number
+      })
+    } catch (e) {
+      error.value = String(e)
+    } finally {
+      loadingFiles.value = false
+    }
+  }
 
   async function openPrDetail(repo: string, number: number) {
     const remote = await remoteInfo(repo)
@@ -228,6 +257,7 @@ export const useGithubStore = defineStore('github', () => {
   function closePrDetail() {
     prDetail.value = null
     prDetailRepo.value = null
+    prFiles.value = null
   }
 
   async function refreshPrDetail() {
@@ -336,7 +366,7 @@ export const useGithubStore = defineStore('github', () => {
   return {
     user, accounts, activeAccount,
     remoteByRepo, prsByRepo, checksBySha, syncing, loadingPrs, error,
-    prDetail, prDetailRepo, loadingDetail,
+    prDetail, prDetailRepo, loadingDetail, prFiles, loadingFiles, loadPrFiles,
     init, reload, connectPat, switchAccount, logout,
     remoteInfo, listPrs, createPr, push, pull,
     openPrDetail, closePrDetail, refreshPrDetail, commentOnPr,
