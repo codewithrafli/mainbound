@@ -109,3 +109,16 @@ pub fn workspace_set_last(state: State<'_, AppState>, id: String) -> AppResult<(
 pub fn repo_scan(path: String) -> Vec<RepoInfo> {
     scan_repos(Path::new(&path))
 }
+
+/// Frontend-owned session layout snapshot, persisted for restore-on-launch.
+#[tauri::command]
+pub fn sessions_save(state: State<'_, AppState>, data: serde_json::Value) -> AppResult<()> {
+    let mut store = state.store.lock();
+    store.sessions = data;
+    store::save(&store)
+}
+
+#[tauri::command]
+pub fn sessions_load(state: State<'_, AppState>) -> serde_json::Value {
+    state.store.lock().sessions.clone()
+}

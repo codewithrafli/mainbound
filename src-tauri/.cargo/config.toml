@@ -1,4 +1,4 @@
 # Machine-specific: keep Rust build artifacts on the internal disk
 # instead of the external SSD (much faster incremental builds).
 [build]
-target-dir = "/Users/xrafff/.cache/cargo-target/tide"
+target-dir = "/Users/xrafff/.cache/cargo-target/mainbound"

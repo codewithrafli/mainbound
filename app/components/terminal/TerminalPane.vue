@@ -2,6 +2,7 @@
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
+import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
@@ -14,6 +15,7 @@ const emit = defineEmits<{
   exited: [code: number]
 }>()
 
+const notifications = useNotificationsStore()
 const el = ref<HTMLDivElement>()
 
 let term: Terminal | undefined
@@ -23,6 +25,8 @@ const unlisteners: UnlistenFn[] = []
 
 onMounted(async () => {
   term = new Terminal({
+    // required by the unicode11 addon
+    allowProposedApi: true,
     cursorBlink: true,
     scrollback: 10_000,
     fontSize: 12.5,
@@ -39,6 +43,10 @@ onMounted(async () => {
   })
   fit = new FitAddon()
   term.loadAddon(fit)
+  // match zsh's wcwidth: emoji & friends count as 2 cells, otherwise
+  // p10k-style prompts position the cursor past the rendered text
+  term.loadAddon(new Unicode11Addon())
+  term.unicode.activeVersion = '11'
   term.open(el.value!)
   try {
     term.loadAddon(new WebglAddon())
@@ -47,10 +55,24 @@ onMounted(async () => {
   }
   fit.fit()
 
+  // notification signals: bell + explicit OSC notifications
+  term.onBell(() => notifications.onBell(props.sessionId))
+  term.parser.registerOscHandler(9, (data) => {
+    notifications.onOscNotify(props.sessionId, '', data)
+    return true
+  })
+  term.parser.registerOscHandler(777, (data) => {
+    // urxvt format: notify;title;body
+    const [kind, title, ...rest] = data.split(';')
+    if (kind === 'notify') notifications.onOscNotify(props.sessionId, title ?? '', rest.join(';'))
+    return true
+  })
+
   // Listeners BEFORE spawn so the first prompt bytes aren't lost
   unlisteners.push(
     await listen<string>(`pty://data/${props.sessionId}`, (e) => {
       term?.write(e.payload)
+      notifications.onOutput(props.sessionId)
     }),
     await listen<{ id: string, code: number }>(`pty://exit/${props.sessionId}`, (e) => {
       emit('exited', e.payload.code)
@@ -98,6 +120,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()
   unlisteners.forEach(off => off())
+  notifications.forget(props.sessionId)
   term?.dispose()
 })
 

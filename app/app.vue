@@ -2,7 +2,7 @@
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
 useHead({
-  title: 'tide',
+  title: 'Mainbound',
   htmlAttrs: { lang: 'en' }
 })
 
@@ -10,10 +10,12 @@ useHead({
 const ui = useUiStore()
 const terminals = useTerminalsStore()
 const workspaces = useWorkspacesStore()
+const notifications = useNotificationsStore()
 
 let unlistenMenu: UnlistenFn | undefined
 
 onMounted(async () => {
+  notifications.init()
   unlistenMenu = await listen<string>('menu://action', ({ payload }) => {
     switch (payload) {
       case 'new-session':

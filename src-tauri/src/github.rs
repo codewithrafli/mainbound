@@ -9,7 +9,9 @@ use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 use crate::store;
 
-const KEYRING_SERVICE: &str = "dev.tide.app";
+const KEYRING_SERVICE: &str = "dev.mainbound.app";
+/// pre-rename service name (the app used to be called "tide")
+const LEGACY_KEYRING_SERVICE: &str = "dev.tide.app";
 const LEGACY_KEYRING_USER: &str = "github-token";
 const API: &str = "https://api.github.com";
 
@@ -17,7 +19,7 @@ fn http() -> &'static reqwest::Client {
     static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
     CLIENT.get_or_init(|| {
         reqwest::Client::builder()
-            .user_agent("tide")
+            .user_agent("mainbound")
             .build()
             .expect("reqwest client")
     })
@@ -35,7 +37,19 @@ fn entry_for(login: &str) -> AppResult<keyring::Entry> {
 }
 
 fn token_for(login: &str) -> Option<String> {
-    entry_for(login).ok()?.get_password().ok()
+    if let Ok(token) = entry_for(login).ok()?.get_password() {
+        return Some(token);
+    }
+    // one-time migration from the old keychain service name
+    let user = format!("github-token:{login}");
+    let old = keyring::Entry::new(LEGACY_KEYRING_SERVICE, &user).ok()?;
+    let token = old.get_password().ok()?;
+    if let Ok(new) = entry_for(login) {
+        if new.set_password(&token).is_ok() {
+            let _ = old.delete_credential();
+        }
+    }
+    Some(token)
 }
 
 fn active_login(state: &AppState) -> Option<String> {
@@ -69,7 +83,7 @@ async fn migrate_legacy(state: &AppState) {
     if !needs {
         return;
     }
-    let Ok(legacy) = keyring::Entry::new(KEYRING_SERVICE, LEGACY_KEYRING_USER) else { return };
+    let Ok(legacy) = keyring::Entry::new(LEGACY_KEYRING_SERVICE, LEGACY_KEYRING_USER) else { return };
     let Ok(token) = legacy.get_password() else { return };
     if let Ok(user) = api_get(&token, "/user").await {
         let login = user["login"].as_str().unwrap_or_default().to_string();

@@ -4,6 +4,7 @@ import { leavesOf } from '~/stores/terminals'
 
 const terminals = useTerminalsStore()
 const workspaces = useWorkspacesStore()
+const notifications = useNotificationsStore()
 
 const repoItems = computed<DropdownMenuItem[]>(() =>
   workspaces.repos.map(repo => ({
@@ -92,10 +93,17 @@ function onDragStart(tabId: string, event: DragEvent) {
         @dragstart="onDragStart(tab.id, $event)"
         @dragend="terminals.draggingTabId = null"
       >
-        <UIcon
-          name="i-lucide-terminal"
-          class="size-3.5 shrink-0"
-        />
+        <span class="relative shrink-0">
+          <UIcon
+            name="i-lucide-terminal"
+            class="size-3.5 block"
+          />
+          <!-- unread notification dot -->
+          <span
+            v-if="notifications.unreadByTab[tab.id]"
+            class="absolute -top-1 -right-1 size-2 rounded-full bg-amber-400 ring-2 ring-(--ui-bg-muted)"
+          />
+        </span>
         <span class="flex-1 min-w-0">
           <span class="block truncate leading-tight">
             {{ tab.title }}

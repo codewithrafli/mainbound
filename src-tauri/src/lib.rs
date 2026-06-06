@@ -1,5 +1,6 @@
 mod ai;
 mod error;
+mod notify;
 mod git;
 mod github;
 mod pty;
@@ -12,8 +13,10 @@ use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::Emitter;
 
 fn build_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
-  let app_menu = SubmenuBuilder::new(app, "tide")
+  let app_menu = SubmenuBuilder::new(app, "Mainbound")
     .about(None)
+    .separator()
+    .item(&MenuItemBuilder::with_id("notify-test", "Test Notification").build(app)?)
     .separator()
     .services()
     .separator()
@@ -71,6 +74,22 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
         .build(app)?,
     )
     .separator()
+    .item(
+      &MenuItemBuilder::with_id("zoom-in", "Zoom In")
+        .accelerator("CmdOrCtrl+=")
+        .build(app)?,
+    )
+    .item(
+      &MenuItemBuilder::with_id("zoom-out", "Zoom Out")
+        .accelerator("CmdOrCtrl+-")
+        .build(app)?,
+    )
+    .item(
+      &MenuItemBuilder::with_id("zoom-reset", "Reset Zoom")
+        .accelerator("CmdOrCtrl+0")
+        .build(app)?,
+    )
+    .separator()
     .fullscreen()
     .build()?;
 
@@ -81,7 +100,34 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
     .build()?;
   app.set_menu(menu)?;
   app.on_menu_event(|app, event| {
-    let _ = app.emit("menu://action", event.id().0.clone());
+    let id = event.id().0.as_str();
+    match id {
+      "notify-test" => {
+        notify::send(app, "Mainbound", "Notifications are working 🎉");
+      }
+      // zoom is handled natively — no webview round-trip needed
+      "zoom-in" | "zoom-out" | "zoom-reset" => {
+        use tauri::Manager;
+        if let Some(state) = app.try_state::<AppState>() {
+          let mut zoom = state.zoom.lock();
+          *zoom = match id {
+            "zoom-in" => (*zoom + 0.1).min(3.0),
+            "zoom-out" => (*zoom - 0.1).max(0.5),
+            _ => 1.0,
+          };
+          if let Some(window) = app.get_webview_window("main") {
+            let _ = window.set_zoom(*zoom);
+          }
+          // persist across restarts
+          let mut persisted = state.store.lock();
+          persisted.zoom = *zoom;
+          let _ = store::save(&persisted);
+        }
+      }
+      _ => {
+        let _ = app.emit("menu://action", id.to_string());
+      }
+    }
   });
   Ok(())
 }
@@ -91,10 +137,13 @@ pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_dialog::init())
+    .plugin(tauri_plugin_notification::init())
+    .plugin(tauri_plugin_window_state::Builder::default().build())
     .manage(AppState::new())
     .invoke_handler(tauri::generate_handler![
       ai::ai_commit_message,
       ai::ai_pr_message,
+      notify::notify,
       pty::pty_spawn,
       pty::pty_write,
       pty::pty_resize,
@@ -134,9 +183,22 @@ pub fn run() {
       workspace::workspace_remove,
       workspace::workspace_set_last,
       workspace::repo_scan,
+      workspace::sessions_save,
+      workspace::sessions_load,
     ])
     .setup(|app| {
       build_menu(app.handle())?;
+      // re-apply persisted zoom
+      {
+        use tauri::Manager;
+        let state = app.state::<AppState>();
+        let zoom = *state.zoom.lock();
+        if (zoom - 1.0).abs() > f64::EPSILON {
+          if let Some(window) = app.get_webview_window("main") {
+            let _ = window.set_zoom(zoom);
+          }
+        }
+      }
       if cfg!(debug_assertions) {
         app.handle().plugin(
           tauri_plugin_log::Builder::default()

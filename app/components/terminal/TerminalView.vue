@@ -1,17 +1,31 @@
 <script setup lang="ts">
-import type { PaneNode, PaneSplit } from '~/stores/terminals'
+import { invoke } from '@tauri-apps/api/core'
+import type { PaneNode, PaneSplit, SavedTab } from '~/stores/terminals'
 import { leavesOf } from '~/stores/terminals'
 
 const terminals = useTerminalsStore()
 const workspaces = useWorkspacesStore()
 
-// Restore workspaces, then open a first session in the active one
+// Restore workspaces, then previous session layout (or a fresh session)
 onMounted(async () => {
   await workspaces.init()
-  if (!terminals.tabs.length) {
+  if (terminals.tabs.length) return // HMR remount — already live
+  const saved = await invoke<SavedTab[] | null>('sessions_load').catch(() => null)
+  if (Array.isArray(saved) && saved.length) {
+    terminals.restore(saved)
+  } else {
     terminals.create(workspaces.active?.path ?? null, workspaces.active?.name)
   }
 })
+
+// Persist the layout (debounced) whenever tabs/splits/cwds change
+let saveTimer: ReturnType<typeof setTimeout> | undefined
+watch(() => terminals.tabs, () => {
+  clearTimeout(saveTimer)
+  saveTimer = setTimeout(() => {
+    invoke('sessions_save', { data: terminals.serialize() }).catch(() => {})
+  }, 1_000)
+}, { deep: true })
 
 const area = ref<HTMLDivElement>()
 
