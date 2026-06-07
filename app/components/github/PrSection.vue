@@ -20,6 +20,14 @@ watch([repo, () => github.user], ([r, u]) => {
   if (r && u) github.listPrs(r)
 }, { immediate: true })
 
+// Auto-fill PR template when create modal opens
+watch(createOpen, async (v) => {
+  if (v && repo.value && !body.value.trim()) {
+    await git.loadPrTemplate(repo.value)
+    if (git.prTemplate) body.value = git.prTemplate
+  }
+})
+
 function ciColor(sha: string): string {
   const c = github.checksBySha[sha]
   if (!c || !c.total) return 'bg-neutral-600'

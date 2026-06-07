@@ -61,6 +61,13 @@ const data = computed(() => {
         />
       </div>
 
+      <!-- Conflict resolution helper replaces diff for conflict files -->
+      <GitConflictHelper
+        v-else-if="git.selected?.file.status === '!'"
+        :path="git.selected.file.path"
+        :repo="git.selected.repo"
+      />
+
       <DiffView
         v-else-if="data"
         :data="data"

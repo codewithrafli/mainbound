@@ -32,6 +32,7 @@ const showOnboarding = computed(() =>
             class="h-full"
           />
           <OnboardingOverlay v-if="showOnboarding" />
+          <GithubCiLogsModal />
         </main>
 
         <LayoutStatusBar />

@@ -8,6 +8,7 @@ const changesOpen = ref(true)
 const conflictCount = computed(() => git.status?.conflicts.length ?? 0)
 </script>
 
+
 <template>
   <aside class="flex flex-col w-64 shrink-0 border-r border-default bg-muted/40 overflow-y-auto">
     <!-- Repositories -->
@@ -76,13 +77,27 @@ const conflictCount = computed(() => git.status?.conflicts.length ?? 0)
       </span>
     </button>
 
+    <!-- file search -->
+    <div
+      v-if="changesOpen && (git.status?.unstaged.length ?? 0) > 5"
+      class="px-2 pb-1"
+    >
+      <UInput
+        v-model="git.fileSearch"
+        placeholder="Filter files…"
+        size="xs"
+        icon="i-lucide-search"
+        class="w-full"
+      />
+    </div>
+
     <div
       v-show="changesOpen"
       class="flex-1 px-2 space-y-0.5"
     >
       <template v-if="git.status">
         <GitChangeRow
-          v-for="file in git.status.unstaged"
+          v-for="file in git.filteredUnstaged"
           :key="`u-${file.path}`"
           :file="file"
           :active="git.selected?.file.path === file.path && !git.selected?.file.staged"

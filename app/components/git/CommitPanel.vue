@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 
 const git = useGitStore()
 const github = useGithubStore()
+const toast = useToast()
 const { settings } = storeToRefs(useSettingsStore())
 
 async function doPush() {
@@ -17,17 +18,33 @@ async function doPull() {
 
 const summary = ref('')
 const description = ref('')
+const amend = ref(false)
+
+// Prefill summary/description with last commit message when amend is toggled on
+watch(amend, async (v) => {
+  if (v && git.log.length && !summary.value.trim()) {
+    const last = git.log[0]
+    if (last) summary.value = last.subject
+  }
+  if (!v) {
+    summary.value = ''
+    description.value = ''
+  }
+})
 
 const canCommit = computed(() =>
-  !!summary.value.trim() && !!git.status?.staged.length && !git.committing
+  !!summary.value.trim() && (amend.value || !!git.status?.staged.length) && !git.committing
 )
 
 async function doCommit() {
   if (!canCommit.value || !git.selectedRepo) return
-  const ok = await git.commit(git.selectedRepo, summary.value.trim(), description.value.trim())
+  const ok = amend.value
+    ? await git.amendCommit(git.selectedRepo, summary.value.trim(), description.value.trim())
+    : await git.commit(git.selectedRepo, summary.value.trim(), description.value.trim())
   if (ok) {
     summary.value = ''
     description.value = ''
+    amend.value = false
   }
 }
 
@@ -51,6 +68,17 @@ async function generateWithAi() {
     generating.value = false
   }
 }
+
+async function doCherryPick(hash: string) {
+  if (!git.selectedRepo) return
+  const ok = await git.cherryPick(git.selectedRepo, hash)
+  if (ok) toast.add({ title: 'Cherry-picked', description: hash.slice(0, 7), icon: 'i-lucide-cherry' })
+}
+
+// Load stash on repo change
+watch(() => git.selectedRepo, (repo) => {
+  if (repo) git.refreshStash(repo)
+}, { immediate: true })
 </script>
 
 <template>
@@ -161,8 +189,33 @@ async function generateWithAi() {
               class="size-3"
             />
             Commit
+            <!-- amend toggle -->
+            <UTooltip
+              text="Amend last commit"
+              :content="{ side: 'top' }"
+            >
+              <button
+                class="ml-auto flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded transition-colors"
+                :class="amend ? 'bg-amber-500/20 text-amber-400' : 'text-dimmed hover:text-toned'"
+                @click="amend = !amend"
+              >
+                <UIcon
+                  name="i-lucide-pencil"
+                  class="size-2.5"
+                />
+                Amend
+              </button>
+            </UTooltip>
           </div>
           <div class="p-2.5 space-y-2">
+            <UAlert
+              v-if="amend"
+              color="warning"
+              variant="soft"
+              icon="i-lucide-triangle-alert"
+              description="This will rewrite the last commit. Don't amend pushed commits."
+              class="text-xs"
+            />
             <UInput
               v-model="summary"
               placeholder="Summary (required)"
@@ -198,9 +251,8 @@ async function generateWithAi() {
               :description="aiError"
               class="text-xs"
             />
-            <!-- white primary CTA -->
             <UButton
-              label="Commit"
+              :label="amend ? 'Amend Commit' : 'Commit'"
               color="neutral"
               variant="solid"
               size="sm"
@@ -219,6 +271,9 @@ async function generateWithAi() {
           </div>
         </div>
 
+        <!-- stash manager -->
+        <GitStashManager />
+
         <!-- history card -->
         <div class="panel-card overflow-hidden">
           <div class="flex items-center gap-1.5 px-3 py-2 section-label border-b border-(--ui-border-muted)">
@@ -233,10 +288,10 @@ async function generateWithAi() {
             <div
               v-for="commit in git.log"
               :key="commit.hash"
-              class="flex gap-2"
+              class="group flex gap-2"
             >
               <span class="mt-1 size-1.5 shrink-0 rounded-full bg-blue-500" />
-              <div class="min-w-0">
+              <div class="flex-1 min-w-0">
                 <p class="text-[12px] text-toned truncate leading-tight">
                   {{ commit.subject }}
                 </p>
@@ -244,6 +299,19 @@ async function generateWithAi() {
                   {{ commit.short_hash }} · {{ commit.author }} · {{ useRelativeDate(commit.date) }}
                 </p>
               </div>
+              <UTooltip
+                text="Cherry-pick"
+                :content="{ side: 'left' }"
+              >
+                <UButton
+                  icon="i-lucide-cherry"
+                  size="xs"
+                  color="neutral"
+                  variant="ghost"
+                  class="opacity-0 group-hover:opacity-100 shrink-0 -mt-0.5"
+                  @click="doCherryPick(commit.hash)"
+                />
+              </UTooltip>
             </div>
             <p
               v-if="!git.log.length"
@@ -256,6 +324,9 @@ async function generateWithAi() {
 
         <!-- pull requests -->
         <GithubPrSection />
+
+        <!-- issues -->
+        <GithubIssueSection />
       </div>
     </template>
 

@@ -396,6 +396,25 @@ pub struct Commit {
     pub subject: String,
 }
 
+/// Reads `.github/pull_request_template.md` (or `PULL_REQUEST_TEMPLATE.md`
+/// at the repo root) if present.
+#[tauri::command]
+pub fn git_pr_template(repo: String) -> Option<String> {
+    let candidates = [
+        ".github/pull_request_template.md",
+        ".github/PULL_REQUEST_TEMPLATE.md",
+        "pull_request_template.md",
+        "PULL_REQUEST_TEMPLATE.md",
+    ];
+    for name in candidates {
+        let path = Path::new(&repo).join(name);
+        if let Ok(content) = fs::read_to_string(&path) {
+            return Some(content);
+        }
+    }
+    None
+}
+
 #[tauri::command]
 pub fn git_log(repo: String, limit: u32) -> AppResult<Vec<Commit>> {
     let n = limit.to_string();
@@ -419,4 +438,213 @@ pub fn git_log(repo: String, limit: u32) -> AppResult<Vec<Commit>> {
             })
         })
         .collect())
+}
+
+// ---------------------------------------------------------------------------
+// Stash management
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize, Clone)]
+pub struct StashEntry {
+    pub index: u32,
+    pub message: String,
+    pub branch: String,
+    pub date: String,
+}
+
+#[tauri::command]
+pub fn git_stash_list(repo: String) -> AppResult<Vec<StashEntry>> {
+    let out = run_git_str(
+        &repo,
+        &["stash", "list", "--format=%gd\x1f%gs\x1f%ai\x1e"],
+        &[],
+    )?;
+    Ok(out
+        .split('\x1e')
+        .filter_map(|record| {
+            let record = record.trim();
+            if record.is_empty() {
+                return None;
+            }
+            let mut cols = record.split('\x1f');
+            let selector = cols.next()?.trim().to_string();
+            let subject = cols.next()?.trim().to_string();
+            let date = cols.next()?.trim().get(..10).unwrap_or("").to_string();
+            let index: u32 = selector
+                .trim_start_matches("stash@{")
+                .trim_end_matches('}')
+                .parse()
+                .unwrap_or(0);
+            let (branch, message) = if let Some(rest) = subject.strip_prefix("WIP on ") {
+                if let Some(i) = rest.find(':') {
+                    (rest[..i].trim().to_string(), rest[i + 1..].trim().to_string())
+                } else {
+                    (rest.to_string(), String::new())
+                }
+            } else if let Some(rest) = subject.strip_prefix("On ") {
+                if let Some(i) = rest.find(':') {
+                    (rest[..i].trim().to_string(), rest[i + 1..].trim().to_string())
+                } else {
+                    (rest.to_string(), String::new())
+                }
+            } else {
+                (String::new(), subject)
+            };
+            Some(StashEntry { index, message, branch, date })
+        })
+        .collect())
+}
+
+#[tauri::command]
+pub fn git_stash_push(repo: String, message: Option<String>) -> AppResult<()> {
+    if let Some(ref m) = message {
+        if !m.trim().is_empty() {
+            return run_git(&repo, &["stash", "push", "-m", m.as_str()], &[]).map(|_| ());
+        }
+    }
+    run_git(&repo, &["stash", "push"], &[]).map(|_| ())
+}
+
+#[tauri::command]
+pub fn git_stash_apply(repo: String, index: u32) -> AppResult<()> {
+    let selector = format!("stash@{{{index}}}");
+    run_git(&repo, &["stash", "apply", &selector], &[]).map(|_| ())
+}
+
+#[tauri::command]
+pub fn git_stash_drop(repo: String, index: u32) -> AppResult<()> {
+    let selector = format!("stash@{{{index}}}");
+    run_git(&repo, &["stash", "drop", &selector], &[]).map(|_| ())
+}
+
+// ---------------------------------------------------------------------------
+// Amend last commit
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn git_commit_amend(
+    repo: String,
+    summary: String,
+    description: Option<String>,
+) -> AppResult<CommitResult> {
+    let mut args = vec!["commit", "--amend", "-m", summary.as_str()];
+    let desc = description.unwrap_or_default();
+    if !desc.trim().is_empty() {
+        args.extend(["-m", desc.as_str()]);
+    }
+    run_git(&repo, &args, &[])?;
+    let hash = run_git_str(&repo, &["rev-parse", "--short", "HEAD"], &[])?;
+    Ok(CommitResult { hash: hash.trim().to_string() })
+}
+
+// ---------------------------------------------------------------------------
+// Cherry-pick
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn git_cherry_pick(repo: String, hash: String) -> AppResult<()> {
+    run_git(&repo, &["cherry-pick", &hash], &[]).map(|_| ())
+}
+
+// ---------------------------------------------------------------------------
+// Blame
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize, Clone)]
+pub struct BlameLine {
+    pub line: u32,
+    pub hash: String,
+    pub short_hash: String,
+    pub author: String,
+    /// Unix timestamp (seconds) — formatted to a date string in JS
+    pub timestamp: i64,
+    pub summary: String,
+}
+
+#[tauri::command]
+pub fn git_blame(repo: String, path: String) -> AppResult<Vec<BlameLine>> {
+    let out = run_git(&repo, &["blame", "--line-porcelain", "--", &path], &[])?;
+    let text = String::from_utf8_lossy(&out);
+
+    let mut result: Vec<BlameLine> = Vec::new();
+    let mut cur_hash = String::new();
+    let mut cur_author = String::new();
+    let mut cur_ts: i64 = 0;
+    let mut cur_summary = String::new();
+    let mut cur_line: u32 = 0;
+
+    for line in text.lines() {
+        if let Some(val) = line.strip_prefix("author ") {
+            cur_author = val.to_string();
+        } else if let Some(val) = line.strip_prefix("author-time ") {
+            cur_ts = val.trim().parse().unwrap_or(0);
+        } else if let Some(val) = line.strip_prefix("summary ") {
+            cur_summary = val.to_string();
+        } else if line.starts_with('\t') {
+            if !cur_hash.is_empty() {
+                result.push(BlameLine {
+                    line: cur_line,
+                    short_hash: cur_hash.get(..7).unwrap_or(&cur_hash).to_string(),
+                    hash: cur_hash.clone(),
+                    author: cur_author.clone(),
+                    timestamp: cur_ts,
+                    summary: cur_summary.clone(),
+                });
+            }
+        } else {
+            let parts: Vec<&str> = line.splitn(4, ' ').collect();
+            if parts.len() >= 3
+                && parts[0].len() == 40
+                && parts[0].chars().all(|c| c.is_ascii_hexdigit())
+            {
+                cur_hash = parts[0].to_string();
+                cur_line = parts[2].parse().unwrap_or(0);
+            }
+        }
+    }
+    Ok(result)
+}
+
+// ---------------------------------------------------------------------------
+// Per-hunk staging via git apply --cached
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn git_stage_hunk(repo: String, patch: String) -> AppResult<()> {
+    use std::io::Write;
+    let mut child = Command::new("git")
+        .arg("-C")
+        .arg(&repo)
+        .args(["apply", "--cached", "--whitespace=nowarn"])
+        .stdin(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| AppError::Pty(format!("git apply: {e}")))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(patch.as_bytes());
+    }
+    let out = child
+        .wait_with_output()
+        .map_err(|e| AppError::Pty(format!("git apply wait: {e}")))?;
+    if !out.status.success() {
+        return Err(AppError::Pty(
+            String::from_utf8_lossy(&out.stderr).trim().to_string(),
+        ));
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Conflict resolution: accept ours/theirs then stage
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn git_conflict_resolve(repo: String, path: String, resolution: String) -> AppResult<()> {
+    let side = match resolution.as_str() {
+        "ours" => "--ours",
+        "theirs" => "--theirs",
+        other => return Err(AppError::Pty(format!("unknown resolution: {other}"))),
+    };
+    run_git(&repo, &["checkout", side, "--", &path], &[]).map(|_| ())?;
+    run_git(&repo, &["add", "--", &path], &[]).map(|_| ())
 }
