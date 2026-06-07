@@ -1,4 +1,4 @@
-<p align="center">
+<p align="cente">
   <img src="./public/mainbound-logo.svg" alt="Mainbound" width="88" height="88" />
 </p>
 

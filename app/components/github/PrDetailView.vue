@@ -94,6 +94,56 @@ async function openInBrowser() {
   await openUrl(pr.value.html_url)
 }
 
+const markingReady = ref(false)
+async function doMarkReady() {
+  if (!pr.value || !github.prDetailRepo) return
+  markingReady.value = true
+  await github.markPrReady(github.prDetailRepo, pr.value.number)
+  markingReady.value = false
+}
+
+async function openCiLogs(check: CheckRun) {
+  if (!github.prDetailRepo || !pr.value) return
+  const repo = github.prDetailRepo
+  // Open modal immediately with loading state
+  github.ciLogsModalOpen = true
+  github.ciLogsLoading = true
+  github.ciLogsContent = ''
+  github.ciLogsJobName = check.name
+  try {
+    await github.loadWorkflowRuns(repo, pr.value.head_ref)
+    const run = github.workflowRuns[0]
+    if (!run) {
+      github.ciLogsContent = 'No workflow runs found for this branch.'
+      return
+    }
+    // Find the job matching this check name
+    const { invoke } = await import('@tauri-apps/api/core')
+    const remote = await github.remoteInfo(repo)
+    if (!remote) return
+    const jobs = await invoke<import('~/stores/github').WorkflowJob[]>('gh_workflow_jobs', {
+      owner: remote.owner,
+      name: remote.name,
+      runId: run.id
+    })
+    github.workflowJobs = jobs
+    const job = jobs.find(j => j.name === check.name || j.name.includes(check.name)) ?? jobs[0]
+    if (!job) {
+      github.ciLogsContent = 'Job not found.'
+      return
+    }
+    github.ciLogsContent = await invoke<string>('gh_job_log', {
+      owner: remote.owner,
+      name: remote.name,
+      jobId: job.id
+    })
+  } catch (e) {
+    github.ciLogsContent = String(e)
+  } finally {
+    github.ciLogsLoading = false
+  }
+}
+
 async function submitComment() {
   const text = newComment.value.trim()
   if (!text || commenting.value) return
@@ -128,9 +178,39 @@ function checkDot(check: CheckRun): string {
 }
 
 async function openCheck(check: CheckRun) {
-  if (!check.url) return
-  const { openUrl } = await import('@tauri-apps/plugin-opener')
-  await openUrl(check.url)
+  // Try to open in-app CI logs first; fall back to browser
+  const repo = git.selectedRepo ?? github.prDetailRepo
+  if (repo && check.name) {
+    const pr = github.prDetail
+    if (pr) {
+      await github.loadWorkflowRuns(repo, pr.head_ref)
+      const run = github.workflowRuns.find(r =>
+        r.name === check.name || check.name.startsWith(r.name)
+      )
+      if (run) {
+        // Find matching job in this run
+        const { invoke } = await import('@tauri-apps/api/core')
+        const remote = await github.remoteInfo(repo)
+        if (remote) {
+          const jobs = await invoke<import('~/stores/github').WorkflowJob[]>('gh_workflow_jobs', {
+            owner: remote.owner,
+            name: remote.name,
+            runId: run.id
+          })
+          const job = jobs[0]
+          if (job) {
+            github.openJobLog(repo, run.id, job.id, job.name)
+            return
+          }
+        }
+      }
+    }
+  }
+  // fallback: open in browser
+  if (check.url) {
+    const { openUrl } = await import('@tauri-apps/plugin-opener')
+    await openUrl(check.url)
+  }
 }
 
 const stateBadge = computed(() => {
@@ -214,6 +294,18 @@ const stateBadge = computed(() => {
           <span>{{ pr.changed_files }} files</span>
 
           <span class="flex-1" />
+
+          <!-- mark ready for review (draft → ready) -->
+          <UButton
+            v-if="pr.draft && pr.state === 'open'"
+            label="Mark Ready"
+            icon="i-lucide-eye"
+            color="neutral"
+            variant="soft"
+            size="xs"
+            :loading="markingReady"
+            @click="doMarkReady"
+          />
 
           <!-- merge: explicit confirmation, never one-click -->
           <UPopover
@@ -418,7 +510,7 @@ const stateBadge = computed(() => {
           v-for="check in pr.checks"
           :key="check.name"
           class="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-left text-[12px] text-toned hover:bg-elevated/50 transition-colors"
-          @click="openCheck(check)"
+          @click="openCiLogs(check)"
         >
           <span
             class="size-1.5 shrink-0 rounded-full"
@@ -427,9 +519,9 @@ const stateBadge = computed(() => {
           <span class="flex-1 truncate">{{ check.name }}</span>
           <span class="text-[10px] text-dimmed">{{ check.conclusion ?? check.status }}</span>
           <UIcon
-            v-if="check.url"
-            name="i-lucide-external-link"
+            name="i-lucide-scroll-text"
             class="size-3 text-dimmed"
+            title="View logs"
           />
         </button>
         <p

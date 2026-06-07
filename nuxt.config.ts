@@ -22,14 +22,23 @@ export default defineNuxtConfig({
         // black window. This inline script runs even if bundles fail.
         innerHTML: `(function(){
           function show(msg){
-            var el = document.getElementById('mb-fatal');
-            if (!el) {
-              el = document.createElement('pre');
+            var wrap = document.getElementById('mb-fatal-wrap');
+            if (!wrap) {
+              wrap = document.createElement('div');
+              wrap.id = 'mb-fatal-wrap';
+              wrap.style.cssText = 'position:fixed;left:12px;right:12px;bottom:12px;z-index:99999;';
+              var btn = document.createElement('button');
+              btn.textContent = '✕';
+              btn.style.cssText = 'position:absolute;top:8px;right:10px;background:none;border:none;color:#fca5a5;font-size:14px;cursor:pointer;line-height:1;padding:2px 4px;';
+              btn.onclick = function(){ wrap.remove(); };
+              var el = document.createElement('pre');
               el.id = 'mb-fatal';
-              el.style.cssText = 'position:fixed;left:12px;right:12px;bottom:12px;z-index:99999;max-height:45vh;overflow:auto;margin:0;padding:12px 14px;border-radius:10px;border:1px solid #7f1d1d;background:#1a0a0a;color:#fca5a5;font:11px ui-monospace,monospace;white-space:pre-wrap;';
-              document.documentElement.appendChild(el);
+              el.style.cssText = 'max-height:45vh;overflow:auto;margin:0;padding:12px 32px 12px 14px;border-radius:10px;border:1px solid #7f1d1d;background:#1a0a0a;color:#fca5a5;font:11px ui-monospace,monospace;white-space:pre-wrap;';
+              wrap.appendChild(el);
+              wrap.appendChild(btn);
+              document.documentElement.appendChild(wrap);
             }
-            el.textContent += msg + '\\n';
+            document.getElementById('mb-fatal').textContent += msg + '\\n';
           }
           window.addEventListener('error', function(e){
             show('[error] ' + (e.message || e.type) + (e.filename ? ' @ ' + e.filename + ':' + e.lineno : ''));

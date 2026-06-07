@@ -106,6 +106,36 @@ export interface PrDetail {
   checks: CheckRun[]
 }
 
+export interface GhIssue {
+  number: number
+  title: string
+  state: string
+  body: string
+  author: string
+  created_at: string
+  html_url: string
+  labels: string[]
+  comments: number
+}
+
+export interface WorkflowRun {
+  id: number
+  name: string
+  status: string
+  conclusion: string | null
+  created_at: string
+  html_url: string
+}
+
+export interface WorkflowJob {
+  id: number
+  name: string
+  status: string
+  conclusion: string | null
+  started_at: string | null
+  completed_at: string | null
+}
+
 export const useGithubStore = defineStore('github', () => {
   const user = ref<GhUser | null>(null)
   const accounts = ref<string[]>([])
@@ -117,6 +147,13 @@ export const useGithubStore = defineStore('github', () => {
   const syncing = ref<'push' | 'pull' | null>(null)
   const loadingPrs = ref(false)
   const error = ref<string | null>(null)
+  const issuesByRepo = ref<Record<string, GhIssue[]>>({})
+  const workflowRuns = ref<WorkflowRun[]>([])
+  const workflowJobs = ref<WorkflowJob[]>([])
+  const ciLogsModalOpen = ref(false)
+  const ciLogsContent = ref('')
+  const ciLogsLoading = ref(false)
+  const ciLogsJobName = ref('')
 
   /** Re-reads auth state and drops per-account caches. */
   async function reload() {
@@ -335,6 +372,72 @@ export const useGithubStore = defineStore('github', () => {
     }
   }
 
+  async function listIssues(repo: string) {
+    const remote = await remoteInfo(repo)
+    if (!remote || !user.value) return
+    try {
+      issuesByRepo.value[repo] = await invoke<GhIssue[]>('gh_issues_list', {
+        owner: remote.owner,
+        name: remote.name
+      })
+    } catch (e) {
+      error.value = String(e)
+    }
+  }
+
+  async function markPrReady(repo: string, number: number): Promise<boolean> {
+    const remote = await remoteInfo(repo)
+    if (!remote) return false
+    try {
+      await invoke('gh_pr_mark_ready', { owner: remote.owner, name: remote.name, number })
+      await refreshPrDetail()
+      return true
+    } catch (e) {
+      error.value = String(e)
+      return false
+    }
+  }
+
+  async function loadWorkflowRuns(repo: string, branch?: string) {
+    const remote = await remoteInfo(repo)
+    if (!remote) return
+    try {
+      workflowRuns.value = await invoke<WorkflowRun[]>('gh_workflow_runs', {
+        owner: remote.owner,
+        name: remote.name,
+        branch: branch ?? null
+      })
+    } catch (e) {
+      error.value = String(e)
+    }
+  }
+
+  async function openJobLog(repo: string, runId: number, jobId: number, jobName: string) {
+    const remote = await remoteInfo(repo)
+    if (!remote) return
+    ciLogsModalOpen.value = true
+    ciLogsLoading.value = true
+    ciLogsContent.value = ''
+    ciLogsJobName.value = jobName
+    try {
+      const jobs = await invoke<WorkflowJob[]>('gh_workflow_jobs', {
+        owner: remote.owner,
+        name: remote.name,
+        runId
+      })
+      workflowJobs.value = jobs
+      ciLogsContent.value = await invoke<string>('gh_job_log', {
+        owner: remote.owner,
+        name: remote.name,
+        jobId
+      })
+    } catch (e) {
+      ciLogsContent.value = String(e)
+    } finally {
+      ciLogsLoading.value = false
+    }
+  }
+
   async function push(repo: string) {
     syncing.value = 'push'
     try {
@@ -367,9 +470,12 @@ export const useGithubStore = defineStore('github', () => {
     user, accounts, activeAccount,
     remoteByRepo, prsByRepo, checksBySha, syncing, loadingPrs, error,
     prDetail, prDetailRepo, loadingDetail, prFiles, loadingFiles, loadPrFiles,
+    issuesByRepo, workflowRuns, workflowJobs,
+    ciLogsModalOpen, ciLogsContent, ciLogsLoading, ciLogsJobName,
     init, reload, connectPat, switchAccount, logout,
     remoteInfo, listPrs, createPr, push, pull,
     openPrDetail, closePrDetail, refreshPrDetail, commentOnPr,
-    replyToThread, resolveThread, mergePr
+    replyToThread, resolveThread, mergePr,
+    listIssues, markPrReady, loadWorkflowRuns, openJobLog
   }
 })

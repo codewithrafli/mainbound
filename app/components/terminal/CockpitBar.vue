@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { invoke } from '@tauri-apps/api/core'
+import { revealItemInDir } from '@tauri-apps/plugin-opener'
 import type { DropdownMenuItem } from '@nuxt/ui'
 
 const ui = useUiStore()
@@ -287,6 +288,20 @@ const ciSummary = computed(() => {
         class="text-dimmed px-1"
       >no open PR</span>
 
+      <UTooltip
+        text="Reveal in Finder"
+        :content="{ side: 'bottom' }"
+      >
+        <UButton
+          v-if="cockpit.activeRepo"
+          icon="i-lucide-folder-open"
+          color="neutral"
+          variant="ghost"
+          size="xs"
+          aria-label="Reveal in Finder"
+          @click="revealItemInDir(cockpit.activeRepo!)"
+        />
+      </UTooltip>
       <UButton
         icon="i-lucide-refresh-cw"
         color="neutral"
