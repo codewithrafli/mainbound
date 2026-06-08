@@ -231,7 +231,8 @@ export const useGithubStore = defineStore('github', () => {
   async function createPr(repo: string, head: string, base: string, title: string, body: string): Promise<Pr | null> {
     const remote = await remoteInfo(repo)
     if (!remote) {
-      error.value = 'No GitHub remote found for this repository'
+      // Don't pollute global error state — this is a normal condition
+      // for repos without a GitHub remote. Caller handles null return.
       return null
     }
     try {

@@ -17,6 +17,8 @@ const repo = computed(() => git.selectedRepo)
 const prs = computed(() => (repo.value ? github.prsByRepo[repo.value] ?? [] : []))
 
 watch([repo, () => github.user], ([r, u]) => {
+  // Clear stale error when switching repos
+  github.error = null
   if (r && u) github.listPrs(r)
 }, { immediate: true })
 
@@ -152,8 +154,10 @@ async function submitPr() {
       >
         No open pull requests.
       </p>
+      <!-- Only show errors that are NOT about missing remote — that's
+           handled by hiding the whole section (v-if="github.user && repo") -->
       <UAlert
-        v-if="github.error"
+        v-if="github.error && !github.error.includes('remote')"
         color="error"
         variant="soft"
         :description="github.error"
