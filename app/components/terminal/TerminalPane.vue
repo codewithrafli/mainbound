@@ -2,6 +2,7 @@
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
+import { CanvasAddon } from '@xterm/addon-canvas'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { SearchAddon } from '@xterm/addon-search'
 import { invoke } from '@tauri-apps/api/core'
@@ -34,14 +35,19 @@ watch(() => settings.fontSize, (size) => {
 })
 
 onMounted(async () => {
+  // Cross-platform monospace stack: Consolas ships with Windows,
+  // SF Mono/Menlo on macOS, Noto on Linux
+  const fontFamily = 'ui-monospace, "Cascadia Code", Consolas, "SF Mono", Menlo, "DejaVu Sans Mono", monospace'
+
   term = new Terminal({
-    // required by the unicode11 addon
     allowProposedApi: true,
     cursorBlink: true,
     scrollback: 10_000,
     fontSize: settings.fontSize,
-    fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+    fontFamily,
     lineHeight: 1.35,
+    // Disable GPU compositing on Windows to avoid WebView2 flickering
+    fastScrollModifier: 'alt',
     theme: {
       background: '#0e0e10',
       foreground: '#cccccc',
@@ -53,18 +59,33 @@ onMounted(async () => {
   })
   fit = new FitAddon()
   term.loadAddon(fit)
-  // match zsh's wcwidth: emoji & friends count as 2 cells, otherwise
-  // p10k-style prompts position the cursor past the rendered text
   term.loadAddon(new Unicode11Addon())
   term.unicode.activeVersion = '11'
   search = new SearchAddon()
   term.loadAddon(search)
   term.open(el.value!)
+
+  // Renderer: try WebGL → Canvas → DOM (in order of performance)
+  let rendererLoaded = false
   try {
-    term.loadAddon(new WebglAddon())
+    const webgl = new WebglAddon()
+    // WebGL can throw or silently fail on some Windows GPU drivers
+    webgl.onContextLoss(() => {
+      webgl.dispose()
+    })
+    term.loadAddon(webgl)
+    rendererLoaded = true
   } catch {
-    // WebGL unavailable — xterm falls back to the DOM renderer
+    // WebGL failed — try Canvas
   }
+  if (!rendererLoaded) {
+    try {
+      term.loadAddon(new CanvasAddon())
+    } catch {
+      // Fall back to DOM renderer (always works, slowest)
+    }
+  }
+
   fit.fit()
 
   // notification signals: bell + explicit OSC notifications

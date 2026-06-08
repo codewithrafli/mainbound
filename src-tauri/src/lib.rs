@@ -13,6 +13,8 @@ use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::Emitter;
 
 fn build_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
+  // macOS has a named app menu; Windows/Linux use a simpler top-level
+  #[cfg(target_os = "macos")]
   let app_menu = SubmenuBuilder::new(app, "Mainbound")
     .about(None)
     .separator()
@@ -24,6 +26,14 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
     .hide()
     .hide_others()
     .show_all()
+    .separator()
+    .quit()
+    .build()?;
+
+  #[cfg(not(target_os = "macos"))]
+  let app_menu = SubmenuBuilder::new(app, "Mainbound")
+    .item(&MenuItemBuilder::with_id("check-updates", "Check for Updates…").build(app)?)
+    .item(&MenuItemBuilder::with_id("notify-test", "Test Notification").build(app)?)
     .separator()
     .quit()
     .build()?;
@@ -223,14 +233,32 @@ pub fn run() {
     ])
     .setup(|app| {
       build_menu(app.handle())?;
+
+      use tauri::Manager;
+      let window = app.get_webview_window("main");
+
+      // macOS: overlay title bar + hidden title (traffic lights over our rail)
+      #[cfg(target_os = "macos")]
+      if let Some(w) = &window {
+        use tauri::TitleBarStyle;
+        let _ = w.set_title_bar_style(TitleBarStyle::Overlay);
+        let _ = w.set_title(""); // hides the text next to traffic lights
+      }
+
+      // Windows: make sure the window is visible and properly sized
+      #[cfg(target_os = "windows")]
+      if let Some(w) = &window {
+        let _ = w.show();
+        let _ = w.set_focus();
+      }
+
       // re-apply persisted zoom
       {
-        use tauri::Manager;
         let state = app.state::<AppState>();
         let zoom = *state.zoom.lock();
         if (zoom - 1.0).abs() > f64::EPSILON {
-          if let Some(window) = app.get_webview_window("main") {
-            let _ = window.set_zoom(zoom);
+          if let Some(w) = &window {
+            let _ = w.set_zoom(zoom);
           }
         }
       }
