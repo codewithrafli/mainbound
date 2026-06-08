@@ -74,5 +74,10 @@ export const useWorkspacesStore = defineStore('workspaces', () => {
     }
   }
 
-  return { list, activeId, active, repos, scanning, initialized, init, add, setActive, remove, scan }
+  /** Called by git store to check if a repo path still belongs to this workspace. */
+  function hasRepo(repoPath: string): boolean {
+    return repos.value.some(r => r.path === repoPath)
+  }
+
+  return { list, activeId, active, repos, scanning, initialized, init, add, setActive, remove, scan, hasRepo }
 })

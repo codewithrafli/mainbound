@@ -112,6 +112,7 @@ onMounted(async () => {
     })
   )
 
+  let spawnOk = false
   try {
     await invoke('pty_spawn', {
       id: props.sessionId,
@@ -120,10 +121,15 @@ onMounted(async () => {
       rows: term.rows,
       shell: settings.shell || null
     })
+    spawnOk = true
   } catch (err) {
     term.writeln(`\x1b[31mfailed to spawn shell: ${err}\x1b[0m`)
+    // Clean up listeners so they don't fire for a future session with same id
+    unlisteners.forEach(off => off())
+    unlisteners.length = 0
     return
   }
+  if (!spawnOk) return
 
   term.onData((data) => {
     invoke('pty_write', { id: props.sessionId, data })

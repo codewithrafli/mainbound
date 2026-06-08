@@ -57,6 +57,8 @@ export const useGitStore = defineStore('git', () => {
   const diffLoading = ref(false)
   const committing = ref(false)
   const error = ref<string | null>(null)
+  // prevents concurrent stage/unstage/discard on the same repo
+  const gitBusy = ref(false)
   const stashList = ref<StashEntry[]>([])
   const blameByPath = ref<Record<string, BlameLine[]>>({})
   const fileSearch = ref('')
@@ -108,52 +110,75 @@ export const useGitStore = defineStore('git', () => {
     await refresh(repo)
   }
 
+  let diffSeq = 0
   async function selectFile(repo: string, file: FileChange) {
     selected.value = { repo, file }
+    diff.value = '' // clear immediately so stale diff never shows
     diffLoading.value = true
+    const seq = ++diffSeq
     try {
-      diff.value = await invoke<string>('git_diff', {
+      const result = await invoke<string>('git_diff', {
         repo,
         path: file.path,
         staged: file.staged,
         untracked: file.status === 'U'
       })
+      // discard if another selectFile was called while awaiting
+      if (seq === diffSeq) diff.value = result
     } catch (e) {
-      diff.value = ''
-      error.value = String(e)
+      if (seq === diffSeq) {
+        diff.value = ''
+        error.value = String(e)
+      }
     } finally {
-      diffLoading.value = false
+      if (seq === diffSeq) diffLoading.value = false
     }
   }
 
   async function stage(repo: string, paths: string[]) {
-    await invoke('git_stage', { repo, paths })
-    await refresh(repo)
+    if (gitBusy.value) return
+    gitBusy.value = true
+    try {
+      await invoke('git_stage', { repo, paths })
+      await refresh(repo)
+    } finally { gitBusy.value = false }
   }
 
   async function stageAll(repo: string) {
-    await invoke('git_stage_all', { repo })
-    await refresh(repo)
+    if (gitBusy.value) return
+    gitBusy.value = true
+    try {
+      await invoke('git_stage_all', { repo })
+      await refresh(repo)
+    } finally { gitBusy.value = false }
   }
 
   async function unstage(repo: string, paths: string[]) {
-    await invoke('git_unstage', { repo, paths })
-    await refresh(repo)
+    if (gitBusy.value) return
+    gitBusy.value = true
+    try {
+      await invoke('git_unstage', { repo, paths })
+      await refresh(repo)
+    } finally { gitBusy.value = false }
   }
 
   /** Destructive: caller must have confirmed with the user already. */
   async function discard(repo: string, file: FileChange) {
-    const untracked = file.status === 'U'
-    await invoke('git_discard', {
-      repo,
-      tracked: untracked ? [] : [file.path],
-      untracked: untracked ? [file.path] : []
-    })
-    if (selected.value?.file.path === file.path) {
-      selected.value = null
-      diff.value = ''
-    }
-    await refresh(repo)
+    if (gitBusy.value) return
+    gitBusy.value = true
+    try {
+      const untracked = file.status === 'U'
+      await invoke('git_discard', {
+        repo,
+        tracked: untracked ? [] : [file.path],
+        untracked: untracked ? [file.path] : []
+      })
+      if (selected.value?.file.path === file.path) {
+        selected.value = null
+        diff.value = ''
+      }
+      await refresh(repo)
+    } finally { gitBusy.value = false }
   }
 
   async function commit(repo: string, summary: string, description: string) {
@@ -240,6 +265,12 @@ export const useGitStore = defineStore('git', () => {
   }
 
   async function loadBlame(repo: string, path: string) {
+    // Keep at most 20 blame entries to avoid unbounded memory growth
+    const keys = Object.keys(blameByPath.value)
+    if (keys.length >= 20) {
+      const { [keys[0]!]: _, ...rest } = blameByPath.value
+      blameByPath.value = rest
+    }
     try {
       blameByPath.value[path] = await invoke<BlameLine[]>('git_blame', { repo, path })
     } catch {
@@ -296,7 +327,7 @@ export const useGitStore = defineStore('git', () => {
 
   return {
     statusByRepo, logByRepo, selectedRepo, selected, diff, diffLoading,
-    committing, error, status, log, stashList, blameByPath, fileSearch,
+    committing, gitBusy, error, status, log, stashList, blameByPath, fileSearch,
     prTemplate, filteredUnstaged,
     changeCount, refresh, refreshAll, selectRepo, selectFile,
     stage, stageAll, unstage, discard, commit, amendCommit, cherryPick,
