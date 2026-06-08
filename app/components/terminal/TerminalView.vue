@@ -54,6 +54,14 @@ watch(() => ui.terminalSearchOpen, async (open) => {
   }
 })
 
+// Clear search when switching tabs so it doesn't bleed into another session
+watch(() => terminals.activeTabId, () => {
+  if (ui.terminalSearchOpen) {
+    focusedPane()?.clearSearch()
+    searchQuery.value = ''
+  }
+})
+
 watch(searchQuery, (q) => {
   if (q) focusedPane()?.findNext(q, true)
   else focusedPane()?.clearSearch()

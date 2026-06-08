@@ -82,7 +82,8 @@ export default defineNuxtConfig({
         '@xterm/addon-fit',
         '@xterm/addon-search',
         '@xterm/addon-unicode11',
-        '@xterm/addon-webgl'
+        '@xterm/addon-webgl',
+        '@xterm/addon-canvas'
       ]
     },
     server: {

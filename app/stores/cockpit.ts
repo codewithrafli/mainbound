@@ -22,6 +22,7 @@ export const useCockpitStore = defineStore('cockpit', () => {
   const checksByRepo = ref<Record<string, CheckSummary | null>>({})
   const reviewsByRepo = ref<Record<string, ReviewSummary | null>>({})
   const refreshing = ref(false)
+  let refreshSeq = 0 // guards against stale responses overwriting fresh ones
 
   const activeCwd = computed(() => {
     const sid = terminals.focusedSessionId
@@ -97,14 +98,17 @@ export const useCockpitStore = defineStore('cockpit', () => {
   async function refresh() {
     const cwd = activeCwd.value
     if (!cwd) return
+    const seq = ++refreshSeq
     const repo = await resolveRepo(cwd)
-    if (!repo) return
+    // If the active session changed while we were resolving, discard
+    if (!repo || seq !== refreshSeq) return
     refreshing.value = true
     try {
       await git.refresh(repo)
+      if (seq !== refreshSeq) return // another refresh started
       await refreshGh(repo)
     } finally {
-      refreshing.value = false
+      if (seq === refreshSeq) refreshing.value = false
     }
   }
 

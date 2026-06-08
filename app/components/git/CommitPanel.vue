@@ -50,6 +50,8 @@ async function doCommit() {
 
 const generating = ref(false)
 const aiError = ref<string | null>(null)
+let mounted = true
+onBeforeUnmount(() => { mounted = false })
 
 async function generateWithAi() {
   if (!git.selectedRepo || !git.status?.staged.length || generating.value) return
@@ -60,12 +62,14 @@ async function generateWithAi() {
       'ai_commit_message',
       { repo: git.selectedRepo, provider: settings.value.aiProvider }
     )
+    // Don't update state if component was unmounted while awaiting
+    if (!mounted) return
     summary.value = suggestion.summary
     description.value = suggestion.description
   } catch (e) {
-    aiError.value = String(e)
+    if (mounted) aiError.value = String(e)
   } finally {
-    generating.value = false
+    if (mounted) generating.value = false
   }
 }
 

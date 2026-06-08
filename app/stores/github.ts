@@ -155,14 +155,18 @@ export const useGithubStore = defineStore('github', () => {
   const ciLogsLoading = ref(false)
   const ciLogsJobName = ref('')
 
-  /** Re-reads auth state and drops per-account caches. */
+  /** Re-reads auth state and drops all per-account caches. */
   async function reload() {
     const status = await invoke<GhStatusResponse>('gh_status').catch(() => null)
     user.value = status?.user ?? null
     accounts.value = status?.accounts ?? []
     activeAccount.value = status?.active ?? null
+    // Clear ALL caches — remoteByRepo included, so a different account
+    // doesn't reuse the previous user's cached remote info.
     prsByRepo.value = {}
     checksBySha.value = {}
+    remoteByRepo.value = {}
+    issuesByRepo.value = {}
   }
 
   async function init() {
@@ -196,7 +200,10 @@ export const useGithubStore = defineStore('github', () => {
 
   async function listPrs(repo: string) {
     const remote = await remoteInfo(repo)
-    if (!remote || !user.value) return
+    if (!remote || !user.value) {
+      loadingPrs.value = false
+      return
+    }
     loadingPrs.value = true
     try {
       const prs = await invoke<Pr[]>('gh_list_prs', { owner: remote.owner, name: remote.name })
@@ -255,7 +262,7 @@ export const useGithubStore = defineStore('github', () => {
 
   /** Lazy: only fetched when the Files tab is opened. */
   async function loadPrFiles() {
-    if (!prDetail.value || !prDetailRepo.value || loadingFiles.value) return
+    if (!prDetail.value || !prDetailRepo.value || loadingFiles.value || prFiles.value) return
     const remote = await remoteInfo(prDetailRepo.value)
     if (!remote) return
     loadingFiles.value = true
