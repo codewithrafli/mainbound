@@ -89,6 +89,15 @@ watch(() => git.selectedRepo, (repo) => {
   <aside class="flex flex-col w-72 shrink-0 border-l border-default bg-muted/40 overflow-y-auto">
     <template v-if="git.status">
       <div class="p-2 space-y-2">
+        <!-- Ship It -->
+        <GitShipItButton />
+
+        <!-- Bulk staging — shown when many files changed -->
+        <GitBulkStaging />
+
+        <!-- Checkpoint -->
+        <GitCheckpoint />
+
         <!-- branch card -->
         <div class="panel-card px-3 py-2.5">
           <div class="flex items-center gap-2">

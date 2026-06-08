@@ -168,6 +168,7 @@ pub fn run() {
     .invoke_handler(tauri::generate_handler![
       ai::ai_commit_message,
       ai::ai_pr_message,
+      ai::ai_branch_name,
       notify::notify,
       pty::pty_spawn,
       pty::pty_write,

@@ -445,11 +445,45 @@ export const useGithubStore = defineStore('github', () => {
     }
   }
 
-  async function push(repo: string) {
+  async function push(repo: string, { autoDraft = false }: { autoDraft?: boolean } = {}) {
     syncing.value = 'push'
     try {
       await invoke('gh_push', { repo })
       error.value = null
+
+      // Auto-create draft PR if enabled and not already open
+      if (autoDraft && user.value) {
+        const remote = await remoteInfo(repo)
+        const gitStore = useGitStore()
+        const branch = gitStore.statusByRepo[repo]?.branch
+        if (remote && branch && branch !== 'main' && branch !== 'master') {
+          const existing = await invoke<Pr | null>('gh_pr_for_branch', {
+            owner: remote.owner,
+            name: remote.name,
+            branch
+          }).catch(() => null)
+          if (!existing) {
+            // Generate title via AI, fall back to branch name
+            const { invoke: inv } = await import('@tauri-apps/api/core')
+            const suggestion = await inv<{ title: string, body: string }>('ai_pr_message', {
+              repo,
+              base: 'main',
+              provider: null
+            }).catch(() => null)
+            await invoke('gh_create_pr', {
+              owner: remote.owner,
+              name: remote.name,
+              head: branch,
+              base: 'main',
+              title: suggestion?.title ?? branch,
+              body: suggestion?.body ?? null
+            }).catch(() => {})
+            // Refresh PR list
+            await listPrs(repo)
+          }
+        }
+      }
+
       return true
     } catch (e) {
       error.value = String(e)
