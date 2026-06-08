@@ -1,5 +1,5 @@
-<p align="cente">
-  <img src="./public/mainbound-logo.svg" alt="Mainbound" width="88" height="88" />
+<p align="center">
+  <img src="./public/mainbound-logo.svg" alt="Mainbound" width="96" height="96" />
 </p>
 
 <h1 align="center">Mainbound</h1>
@@ -7,99 +7,201 @@
 <p align="center"><b>From shell to main.</b></p>
 
 <p align="center">
-  A macOS terminal workspace that carries your whole workflow toward <code>main</code> —<br/>
-  terminal, git, and pull requests together, without leaving the app.
+  The macOS and Windows terminal workspace that collapses your entire shipping workflow —<br/>
+  terminal, git, and pull requests — into one focused window.
 </p>
 
 <p align="center">
-  <a href="https://github.com/codewithrafli/mainbound/releases/latest"><img src="https://img.shields.io/github/v/release/codewithrafli/mainbound?style=flat-square&color=8b5cf6" alt="Latest release" /></a>
-  <a href="https://github.com/codewithrafli/mainbound/releases"><img src="https://img.shields.io/github/downloads/codewithrafli/mainbound/total?style=flat-square&color=d946ef" alt="Downloads" /></a>
-  <img src="https://img.shields.io/badge/platform-macOS-0e0e10?style=flat-square" alt="macOS" />
+  <a href="https://github.com/codewithrafli/mainbound/releases/latest">
+    <img src="https://img.shields.io/github/v/release/codewithrafli/mainbound?style=flat-square&color=8b5cf6" alt="Latest release" />
+  </a>
+  <a href="https://github.com/codewithrafli/mainbound/releases">
+    <img src="https://img.shields.io/github/downloads/codewithrafli/mainbound/total?style=flat-square&color=d946ef" alt="Downloads" />
+  </a>
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-0e0e10?style=flat-square" alt="macOS & Windows" />
+  <img src="https://img.shields.io/badge/built_with-Tauri_2-24c8db?style=flat-square" alt="Tauri 2" />
 </p>
 
 <p align="center">
   <img src="./docs/assets/demo.gif" alt="Mainbound demo" width="900" />
 </p>
 
-```
-Terminal → Changes → Commit → Push → PR → CI → Merge
-```
+<p align="center">
+  <code>Terminal → Changes → Commit → Push → PR → CI → Merge</code>
+</p>
+
+---
 
 ## Why Mainbound?
 
-Shipping a branch means juggling three apps: a terminal for the work, a git
-client for the changes, and a browser tab for the pull request. Mainbound
-collapses that loop into one window. Every session knows its repository,
-branch, and open PR — the cockpit shows changes, ahead/behind, reviews, and
-CI without you running a single status command.
+Shipping a branch normally means juggling three apps: a terminal for the work, a git client for staging, and a browser tab for the pull request. Context switching burns focus.
+
+Mainbound puts all three in one window. Every terminal session knows its repository, branch, and open PR. The cockpit strip shows live changes, ahead/behind count, review state, and CI status — without running a single status command.
+
+---
 
 ## Features
 
-| | |
-|---|---|
-| **Real terminal, split everything** | zsh over a native PTY (xterm.js + WebGL). Sessions per workspace, recursive splits, drag-and-drop pane docking, ⌘F search, full scrollback that survives view switches and app restarts. |
-| **PR Cockpit** | Always-visible strip: branch switcher, local changes, unpushed ↑↓, open PR with review state and CI checks — updates as you work. |
-| **File Changes** | Status badges with ±counts, syntax-highlighted diffs, stage/unstage/discard, commit with **AI-generated messages** (local `claude` CLI), history, conflicts. |
-| **Pull requests, fully in-app** | Conversation timeline (comments, reviews, commits), inline threads with reply & resolve, per-file diffs, CI checks, merge with confirmation — GitHub website not required. |
-| **Notifications** | Bell, OSC 9/777, and a "command finished" heuristic → native banner with a branded chime, in-app toast, and sidebar badges. Claude Code asking for permission in a background session? You'll know. |
-| **Secure by design** | GitHub tokens (multi-account) live in the macOS Keychain, never in the webview. Push/pull use your own git credentials. No telemetry. |
+### Terminal — the real thing
+- Native PTY over zsh/PowerShell, rendered with xterm.js + WebGL
+- **Recursive splits** — `⌘D` right, `⇧⌘D` down, infinite nesting
+- **Drag-and-drop** pane docking — grab a pane, drop it anywhere
+- `⌘F` in-terminal search with highlighted matches
+- Full scrollback that survives view switches and app restarts
+- Sessions scoped per workspace — switch workspaces, sessions stay alive
+
+### PR Cockpit
+Always-visible strip above the terminal:
+- Branch switcher with one-click checkout and new-branch creation
+- **Changed files** count — click to jump to File Changes
+- **↑↓ ahead/behind** with push/pull buttons
+- **Open PR** title + number, live review state, CI pass/fail
+- Reveal in Finder / Explorer button for the active repo
+
+### File Changes
+- Status badges (M/A/D/R/U/!) with ±line counts
+- Syntax-highlighted unified diff (VS Code-grade, dark theme)
+- Stage / unstage / discard individual files or all at once
+- **Per-hunk staging** — stage specific diff blocks, not whole files
+- **AI commit messages** generated by the local `claude` CLI — no API key needed
+- **Amend last commit** toggle — rewrites with updated message or files
+- **Cherry-pick** any commit from history into the current branch
+- **Stash manager** — push with message, apply, drop
+- **Conflict helper** — Accept Ours / Accept Theirs per conflict file, then auto-stage
+- Filter files by name when the change list gets long
+
+### Pull Requests — fully in-app
+- Full conversation timeline: comments, reviews, commits, events
+- **Inline review threads** with reply and resolve, sorted by time
+- Per-file diffs with syntax highlighting
+- **CI log streaming** — open job logs inside Mainbound, not the browser
+- Merge with method picker (merge / squash / rebase) and confirmation
+- **Convert draft → Ready for Review** without touching GitHub
+- **GitHub Issues** list linked to the active repo
+- **AI-generated PR descriptions** via the local `claude` CLI
+- **PR template auto-fill** from `.github/pull_request_template.md`
+- Multi-account GitHub support — tokens live in the OS native keystore
+
+### Notifications
+- Three detection layers: terminal bell, OSC 9/777, and a "command finished" burst heuristic
+- Native OS notification + in-app toast + sidebar badge dot
+- Works with Claude Code: permission prompts and build completions surface as banners in the background
+
+### Everything else
+- **Auto-update** with changelog — checks on launch, installs in-app
+- Persisted zoom, window size, and sessions across restarts
+- Command palette `⌘K` — jump to any session, repo, or action
+- No telemetry. No accounts. No cloud.
+
+---
 
 ## Install
 
-**One line (recommended — no Gatekeeper drama):**
+### macOS
+
+**One line — no Gatekeeper friction:**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/codewithrafli/mainbound/main/install.sh | bash
 ```
 
-Or download the `.dmg` from [**Releases**](https://github.com/codewithrafli/mainbound/releases/latest)
-(Apple Silicon & Intel). Browser downloads aren't notarized yet, so afterwards run:
+Or grab the `.dmg` from [**Releases**](https://github.com/codewithrafli/mainbound/releases/latest) (Apple Silicon & Intel).
+Direct downloads are unsigned, so run this once after installing:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/Mainbound.app
 ```
 
-Mainbound updates itself in-app (changelog included) — installing is a one-time affair.
+### Windows
+
+Download the `.msi` installer from [**Releases**](https://github.com/codewithrafli/mainbound/releases/latest) (x64).  
+Run the installer — no extra steps needed.
+
+> **Requirements:** Git for Windows and PowerShell 7+ (`winget install Microsoft.PowerShell`) recommended for the best terminal experience.
+
+---
+
+Mainbound updates itself — installing is a one-time affair.
+
+---
 
 ## Keyboard shortcuts
 
 | Shortcut | Action |
-| --- | --- |
-| ⌘K | Command palette — jump to any session, repo, or action |
-| ⌘T | New session |
-| ⌘D / ⇧⌘D | Split pane right / down |
-| ⌘W | Close focused pane |
-| ⌘1 / ⌘2 | Terminal · File Changes |
-| ⌘F | Find in terminal |
-| ⌘+ / ⌘− / ⌘0 | Zoom |
-| ⌘↵ | Commit (from the commit form) |
+|---|---|
+| `⌘T` / `Ctrl+T` | New terminal session |
+| `⌘D` / `Ctrl+D` | Split pane right |
+| `⇧⌘D` / `Ctrl+Shift+D` | Split pane down |
+| `⌘W` / `Ctrl+W` | Close focused pane |
+| `⌘1` / `Ctrl+1` | Terminal view |
+| `⌘2` / `Ctrl+2` | File Changes view |
+| `⌘F` / `Ctrl+F` | Find in terminal |
+| `⌘K` / `Ctrl+K` | Command palette |
+| `⌘↵` / `Ctrl+Enter` | Commit (from commit form) |
+| `⌘=` / `Ctrl+=` | Zoom in |
+| `⌘−` / `Ctrl+-` | Zoom out |
+| `⌘0` / `Ctrl+0` | Reset zoom |
+
+---
 
 ## Development
 
 ```bash
+# Clone and install
+git clone https://github.com/codewithrafli/mainbound.git
+cd mainbound
 bun install
+
+# Run in dev mode
 bun run tauri dev
 ```
 
-Requires Rust (`rustup`), [Bun](https://bun.sh), and `git` on PATH.
+**Requirements:** Rust (`rustup`), [Bun](https://bun.sh), `git` on PATH.
 
-> Note: `src-tauri/.cargo/config.toml` is machine-specific (local cargo
-> target dir) and untracked — create your own if you develop from an
-> external disk.
+> `src-tauri/.cargo/config.toml` is machine-specific (custom `target-dir`) and gitignored — create your own if needed.
 
-Releasing: `bun run release 0.x.y` bumps versions, tags, and pushes — CI
-builds, signs, and publishes the update feed.
+**Record a demo:**
+
+```bash
+bun run demo        # guided screen-record → MP4 + GIF
+bun run demo 75     # fixed 75-second recording
+```
+
+**Release:**
+
+```bash
+bun run release 0.x.y   # bumps versions, tags, pushes → CI builds macOS + Windows
+```
+
+---
 
 ## Architecture
 
-- `src-tauri/src/pty.rs` — portable-pty sessions; output streamed per session via `pty://data/{id}` events
-- `src-tauri/src/git.rs` — shells out to `git` (porcelain v2), no libgit2
-- `src-tauri/src/github.rs` — GitHub REST + GraphQL via reqwest; tokens in Keychain (`keyring`)
-- `src-tauri/src/ai.rs` — commit/PR message generation through the local `claude` CLI
-- `app/` — Nuxt 4 SPA (`ssr: false`), Nuxt UI, Pinia stores
+```
+src-tauri/src/
+  pty.rs       — portable-pty sessions, UTF-8-safe streaming via pty://data/{id}
+  git.rs       — git CLI (porcelain v2), stash, blame, hunk staging, cherry-pick
+  github.rs    — GitHub REST + GraphQL, tokens in OS native keystore
+  ai.rs        — commit/PR generation via local claude CLI
+  notify.rs    — 3-layer notification dispatch (cross-platform)
+  workspace.rs — workspace + repo discovery, session persistence
+
+app/
+  stores/      — terminals, git, github, cockpit, notifications, settings, updater
+  components/  — terminal panes, file changes, PR detail, cockpit bar, command palette
+```
+
+---
 
 ## Philosophy
 
-Small and focused. Every feature must answer one question: *does it speed up
-the journey from terminal to a merged PR?* No code editor, no AI chat, no
-dashboards — there are better tools for those.
+Small and focused. Every feature answers one question:
+**Does it speed up the journey from terminal to a merged PR?**
+
+No code editor. No AI chat. No dashboards. There are better tools for those.
+
+---
+
+<p align="center">
+  Made with ☕ by <a href="https://github.com/codewithrafli">codewithrafli</a>
+</p>
