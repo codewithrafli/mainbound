@@ -3,8 +3,8 @@ use tauri_plugin_notification::NotificationExt;
 
 const SOUND_NAME: &str = "Mainbound";
 
-/// macOS resolves custom notification sounds from ~/Library/Sounds —
-/// install our bundled brand chime there once.
+/// macOS only: install the branded chime to ~/Library/Sounds once.
+#[cfg(target_os = "macos")]
 fn ensure_sound_installed(app: &AppHandle) {
     use tauri::Manager;
     let Some(home) = dirs::home_dir() else { return };
@@ -23,18 +23,30 @@ fn ensure_sound_installed(app: &AppHandle) {
     }
 }
 
-/// Sends a native notification; falls back to osascript so something
-/// always shows even when the notification plugin path fails.
+#[cfg(not(target_os = "macos"))]
+fn ensure_sound_installed(_app: &AppHandle) {}
+
+/// Sends a native notification. On macOS falls back to osascript when the
+/// plugin path fails. On Windows/Linux the plugin handles it directly.
 pub fn send(app: &AppHandle, title: &str, body: &str) {
     ensure_sound_installed(app);
+
+    #[cfg(target_os = "macos")]
+    let sound = SOUND_NAME;
+    #[cfg(not(target_os = "macos"))]
+    let sound = "Default";
+
     let shown = app
         .notification()
         .builder()
         .title(title)
         .body(body)
-        .sound(SOUND_NAME)
+        .sound(sound)
         .show()
         .is_ok();
+
+    // osascript fallback — macOS only
+    #[cfg(target_os = "macos")]
     if !shown {
         let esc = |s: &str| s.replace('\\', " ").replace('"', "'");
         let script = format!(
@@ -46,6 +58,10 @@ pub fn send(app: &AppHandle, title: &str, body: &str) {
             .args(["-e", &script])
             .spawn();
     }
+
+    // suppress unused warning on non-macOS
+    #[cfg(not(target_os = "macos"))]
+    let _ = shown;
 }
 
 #[tauri::command]

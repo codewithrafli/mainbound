@@ -14,9 +14,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # macOS — Apple Silicon
           - target: aarch64-apple-darwin
+            os: macos-latest
+          # macOS — Intel
           - target: x86_64-apple-darwin
-    runs-on: macos-latest
+            os: macos-latest
+          # Windows — 64-bit
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+
+    runs-on: ${{ matrix.os }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -33,12 +42,14 @@ jobs:
       - name: Install frontend dependencies
         run: bun install
 
-      # changelog first: it becomes the release body AND the updater's
-      # in-app changelog (latest.json "notes")
+      # Generate changelog (macOS/Linux only — gh CLI works on Windows too
+      # but the heredoc syntax differs; keep it simple with a bash step)
       - name: Generate release notes
         id: notes
+        if: matrix.os == 'macos-latest'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
         run: |
           {
             echo 'body<<NOTES_EOF'
@@ -47,7 +58,8 @@ jobs:
             echo 'NOTES_EOF'
           } >> "$GITHUB_OUTPUT"
 
-      - name: Build and release
+      - name: Build and release (macOS)
+        if: matrix.os == 'macos-latest'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -60,4 +72,19 @@ jobs:
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
+          args: --target ${{ matrix.target }}
+
+      - name: Build and release (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        with:
+          tagName: v__VERSION__
+          releaseName: "Mainbound v__VERSION__"
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: false
           args: --target ${{ matrix.target }}
