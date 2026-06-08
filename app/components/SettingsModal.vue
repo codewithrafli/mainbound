@@ -124,6 +124,18 @@ const updater = useUpdaterStore()
             </div>
             <USwitch v-model="settings.autoUpdateCheck" />
           </div>
+
+          <!-- Auto draft PR -->
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <p class="text-[12.5px] text-toned font-medium">Auto Draft PR on Push</p>
+              <p class="text-[11px] text-dimmed">
+                Automatically create a draft PR with AI description when pushing a new branch.
+              </p>
+            </div>
+            <USwitch v-model="settings.autoDraftPr" />
+          </div>
+
           <UButton
             label="Check for Updates now"
             icon="i-lucide-arrow-up-circle"

@@ -306,6 +306,97 @@ export const useGitStore = defineStore('git', () => {
     prTemplate.value = await invoke<string | null>('git_pr_template', { repo }).catch(() => null)
   }
 
+  // ---------------------------------------------------------------------------
+  // Ship It — full flow: stage all → AI commit → commit → push
+  // ---------------------------------------------------------------------------
+
+  type ShipStep = 'staging' | 'generating' | 'committing' | 'pushing' | 'done'
+  const shipStep = ref<ShipStep | null>(null)
+  const shipError = ref<string | null>(null)
+
+  async function shipIt(
+    repo: string,
+    provider: string,
+    onPush: () => Promise<void>
+  ): Promise<boolean> {
+    shipStep.value = 'staging'
+    shipError.value = null
+    try {
+      await invoke('git_stage_all', { repo })
+      await refresh(repo)
+
+      shipStep.value = 'generating'
+      const suggestion = await invoke<{ summary: string, description: string }>(
+        'ai_commit_message', { repo, provider }
+      )
+
+      shipStep.value = 'committing'
+      await invoke('git_commit', {
+        repo,
+        summary: suggestion.summary,
+        description: suggestion.description || null
+      })
+      await refresh(repo)
+
+      shipStep.value = 'pushing'
+      await onPush()
+
+      shipStep.value = 'done'
+      setTimeout(() => { shipStep.value = null }, 2000)
+      return true
+    } catch (e) {
+      shipError.value = String(e)
+      shipStep.value = null
+      return false
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Checkpoint — named stash with "checkpoint:" prefix
+  // ---------------------------------------------------------------------------
+
+  const checkpoints = computed(() =>
+    stashList.value.filter(s => s.message.startsWith('checkpoint:'))
+  )
+
+  async function checkpointSave(repo: string, name: string) {
+    const msg = `checkpoint: ${name || new Date().toLocaleTimeString()}`
+    return stashPush(repo, msg)
+  }
+
+  async function checkpointRestore(repo: string, index: number) {
+    return stashApply(repo, index)
+  }
+
+  async function checkpointDrop(repo: string, index: number) {
+    return stashDrop(repo, index)
+  }
+
+  // ---------------------------------------------------------------------------
+  // Bulk staging by folder
+  // ---------------------------------------------------------------------------
+
+  /** Returns unstaged files grouped by their top-level directory. */
+  const unstagedByFolder = computed(() => {
+    const s = status.value
+    if (!s) return {} as Record<string, typeof s.unstaged>
+    const groups: Record<string, typeof s.unstaged> = {}
+    for (const file of s.unstaged) {
+      const folder = file.path.includes('/')
+        ? file.path.split('/')[0]!
+        : '.'
+      if (!groups[folder]) groups[folder] = []
+      groups[folder]!.push(file)
+    }
+    return groups
+  })
+
+  async function stageFolder(repo: string, folder: string) {
+    const files = unstagedByFolder.value[folder]
+    if (!files?.length) return
+    await stage(repo, files.map(f => f.path))
+  }
+
   const filteredUnstaged = computed(() => {
     const s = status.value
     if (!s) return []
@@ -328,10 +419,12 @@ export const useGitStore = defineStore('git', () => {
   return {
     statusByRepo, logByRepo, selectedRepo, selected, diff, diffLoading,
     committing, gitBusy, error, status, log, stashList, blameByPath, fileSearch,
-    prTemplate, filteredUnstaged,
+    prTemplate, filteredUnstaged, unstagedByFolder,
+    shipStep, shipError, checkpoints,
     changeCount, refresh, refreshAll, selectRepo, selectFile,
     stage, stageAll, unstage, discard, commit, amendCommit, cherryPick,
     refreshStash, stashPush, stashApply, stashDrop,
-    loadBlame, stageHunk, conflictResolve, loadPrTemplate, resetSelection
+    loadBlame, stageHunk, conflictResolve, loadPrTemplate, resetSelection,
+    shipIt, checkpointSave, checkpointRestore, checkpointDrop, stageFolder
   }
 })

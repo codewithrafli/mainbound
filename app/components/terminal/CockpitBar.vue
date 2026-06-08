@@ -20,6 +20,25 @@ const branches = ref<BranchInfo[]>([])
 const newBranchOpen = ref(false)
 const newBranchName = ref('')
 const switching = ref(false)
+const generatingBranch = ref(false)
+const { settings } = storeToRefs(useSettingsStore())
+
+async function generateBranchName() {
+  if (!cockpit.activeRepo || generatingBranch.value) return
+  generatingBranch.value = true
+  try {
+    const name = await invoke<string>('ai_branch_name', {
+      repo: cockpit.activeRepo,
+      task: newBranchName.value || 'current changes',
+      provider: settings.value.aiProvider
+    })
+    newBranchName.value = name
+  } catch (e) {
+    toast.add({ title: 'AI branch name failed', description: String(e), color: 'error' })
+  } finally {
+    generatingBranch.value = false
+  }
+}
 
 async function loadBranches(open: boolean) {
   if (!open || !cockpit.activeRepo) return
@@ -141,14 +160,27 @@ const ciSummary = computed(() => {
             <p class="text-xs text-muted">
               Create from <span class="font-mono text-toned">{{ cockpit.status?.branch }}</span> and switch to it.
             </p>
-            <UInput
-              v-model="newBranchName"
-              placeholder="feat/my-branch"
-              size="sm"
-              class="w-full font-mono"
-              autofocus
-              @keydown.enter="newBranchName.trim() && checkout(newBranchName.trim(), true)"
-            />
+            <div class="flex gap-1.5">
+              <UInput
+                v-model="newBranchName"
+                placeholder="feat/my-branch"
+                size="sm"
+                class="flex-1 font-mono"
+                autofocus
+                @keydown.enter="newBranchName.trim() && checkout(newBranchName.trim(), true)"
+              />
+              <UTooltip text="Generate with AI" :content="{ side: 'top' }">
+                <UButton
+                  icon="i-lucide-sparkles"
+                  size="sm"
+                  color="neutral"
+                  variant="outline"
+                  :loading="generatingBranch"
+                  aria-label="Generate branch name with AI"
+                  @click="generateBranchName"
+                />
+              </UTooltip>
+            </div>
             <UButton
               label="Create & Switch"
               color="neutral"

@@ -202,6 +202,45 @@ pub async fn ai_pr_message(repo: String, base: String, provider: Option<String>)
 }
 
 #[tauri::command]
+pub async fn ai_branch_name(repo: String, task: String, provider: Option<String>) -> AppResult<String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let provider = AiProvider::parse(provider);
+        // Give the model context: current branch + unstaged file names
+        let current = run_git(&repo, &["rev-parse", "--abbrev-ref", "HEAD"])
+            .unwrap_or_default();
+        let files = run_git(&repo, &["status", "--short"])
+            .unwrap_or_default();
+        let file_list: String = files
+            .lines()
+            .take(20)
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let prompt = format!(
+            "Generate a git branch name for the following task.\n\
+             Reply with ONLY the branch name, no explanation, no quotes.\n\
+             Rules: lowercase, hyphens only, max 50 chars, start with feat/, fix/, chore/, refactor/, or docs/.\n\
+             Current branch: {current}\n\
+             Changed files:\n{file_list}\n\n\
+             Task: {task}"
+        );
+
+        let raw = run_ai_cli(provider, &repo, &prompt)?;
+        let name = raw.trim()
+            .trim_matches('`')
+            .trim_matches('"')
+            .trim_matches('\'')
+            .to_string();
+        if name.is_empty() || name.contains('\n') {
+            return Err(AppError::Pty("AI returned an invalid branch name".into()));
+        }
+        Ok(name)
+    })
+    .await
+    .map_err(|e| AppError::Pty(e.to_string()))?
+}
+
+#[tauri::command]
 pub async fn ai_commit_message(repo: String, provider: Option<String>) -> AppResult<CommitSuggestion> {
     tauri::async_runtime::spawn_blocking(move || {
         let provider = AiProvider::parse(provider);

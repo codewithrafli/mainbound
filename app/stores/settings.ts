@@ -11,6 +11,8 @@ export interface AppSettings {
   notifMinBurst: number
   /** silent update check on launch */
   autoUpdateCheck: boolean
+  /** auto-create draft PR when pushing a new branch */
+  autoDraftPr: boolean
 }
 
 const DEFAULTS: AppSettings = {
@@ -18,7 +20,8 @@ const DEFAULTS: AppSettings = {
   shell: '',
   aiProvider: 'claude',
   notifMinBurst: 10,
-  autoUpdateCheck: true
+  autoUpdateCheck: true,
+  autoDraftPr: false
 }
 
 export const useSettingsStore = defineStore('settings', () => {
