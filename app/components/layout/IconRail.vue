@@ -1,11 +1,13 @@
 <script setup lang="ts">
 const settingsStore = useSettingsStore()
+const { isMac } = usePlatform()
 </script>
 
 <template>
   <aside class="flex flex-col items-center w-12 shrink-0 border-r border-default bg-muted/60">
-    <!-- breathing room under the macOS traffic lights; draggable -->
+    <!-- breathing room under macOS traffic lights (not needed on Windows) -->
     <div
+      v-if="isMac"
       data-tauri-drag-region
       class="h-12 w-full shrink-0"
     />

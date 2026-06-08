@@ -31,6 +31,15 @@ struct ExitPayload {
 }
 
 fn default_shell() -> String {
+    #[cfg(target_os = "windows")]
+    {
+        // Prefer PowerShell 7 (pwsh), fall back to built-in powershell.exe
+        if std::process::Command::new("pwsh").arg("--version").output().is_ok() {
+            return "pwsh".into();
+        }
+        return "powershell.exe".into();
+    }
+    #[cfg(not(target_os = "windows"))]
     std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into())
 }
 
@@ -54,10 +63,13 @@ pub fn pty_spawn(
     let shell = shell
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(default_shell);
-    let cwd = cwd
-        .map(PathBuf::from)
-        .or_else(dirs::home_dir)
-        .unwrap_or_else(|| PathBuf::from("/"));
+    let fallback = dirs::home_dir().unwrap_or_else(|| {
+        #[cfg(target_os = "windows")]
+        { PathBuf::from("C:\\") }
+        #[cfg(not(target_os = "windows"))]
+        { PathBuf::from("/") }
+    });
+    let cwd = cwd.map(PathBuf::from).unwrap_or(fallback);
 
     let pty_system = native_pty_system();
     let pair = pty_system
@@ -70,18 +82,22 @@ pub fn pty_spawn(
         .map_err(|e| AppError::Pty(e.to_string()))?;
 
     let mut cmd = CommandBuilder::new(&shell);
-    cmd.arg("-l"); // login shell so the user's PATH/rc files load
+
+    // Login shell flag: Unix only. PowerShell doesn't support -l.
+    #[cfg(not(target_os = "windows"))]
+    cmd.arg("-l");
+
     cmd.cwd(&cwd);
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
-    // GUI apps don't inherit a locale on macOS. Without a UTF-8 LANG,
-    // zsh falls back to the C locale and counts each BYTE of multibyte
-    // glyphs as one cell — prompt frameworks (oh-my-posh, p10k) then
-    // misplace the cursor and right-aligned segments.
+    cmd.env("TERM_PROGRAM", "mainbound");
+
+    // macOS GUI apps don't inherit a locale; without UTF-8 LANG, zsh
+    // counts each byte of multibyte glyphs as one cell → prompt misplacement.
+    #[cfg(target_os = "macos")]
     if std::env::var("LANG").is_err() {
         cmd.env("LANG", "en_US.UTF-8");
     }
-    cmd.env("TERM_PROGRAM", "mainbound");
 
     let child = pair
         .slave

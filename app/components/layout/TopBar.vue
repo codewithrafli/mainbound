@@ -2,11 +2,12 @@
 const ui = useUiStore()
 const terminals = useTerminalsStore()
 const workspaces = useWorkspacesStore()
+const { cmdKey } = usePlatform()
 
-const views = [
-  { id: 'terminal' as const, label: 'Terminal', kbd: '⌘1' },
-  { id: 'changes' as const, label: 'File Changes', kbd: '⌘2' }
-]
+const views = computed(() => [
+  { id: 'terminal' as const, label: 'Terminal', kbd: `${cmdKey.value}1` },
+  { id: 'changes' as const, label: 'File Changes', kbd: `${cmdKey.value}2` }
+])
 
 function newSession() {
   ui.view = 'terminal'
