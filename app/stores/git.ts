@@ -283,6 +283,17 @@ export const useGitStore = defineStore('git', () => {
     return s.unstaged.filter(f => f.path.toLowerCase().includes(q))
   })
 
+  /** Clear the selected repo + diff when switching workspaces. */
+  function resetSelection() {
+    selectedRepo.value = null
+    selected.value = null
+    diff.value = ''
+    error.value = null
+    fileSearch.value = ''
+    stashList.value = []
+    prTemplate.value = null
+  }
+
   return {
     statusByRepo, logByRepo, selectedRepo, selected, diff, diffLoading,
     committing, error, status, log, stashList, blameByPath, fileSearch,
@@ -290,6 +301,6 @@ export const useGitStore = defineStore('git', () => {
     changeCount, refresh, refreshAll, selectRepo, selectFile,
     stage, stageAll, unstage, discard, commit, amendCommit, cherryPick,
     refreshStash, stashPush, stashApply, stashDrop,
-    loadBlame, stageHunk, conflictResolve, loadPrTemplate
+    loadBlame, stageHunk, conflictResolve, loadPrTemplate, resetSelection
   }
 })
