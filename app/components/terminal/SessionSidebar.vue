@@ -139,12 +139,15 @@ function onDragStart(tabId: string, event: DragEvent) {
         >
           {{ workspaces.repos.length }} repositories
         </p>
-        <button
-          class="btn-gradient w-full rounded-lg py-1.5 text-[11.5px] font-semibold transition"
+        <UButton
+          label="Add Workspace"
+          icon="i-lucide-folder-plus"
+          color="neutral"
+          variant="outline"
+          size="xs"
+          block
           @click="workspaces.add()"
-        >
-          Add Workspace
-        </button>
+        />
       </div>
     </div>
   </aside>
