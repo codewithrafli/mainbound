@@ -61,7 +61,7 @@ onBeforeUnmount(() => unlistenFocus?.())
 
 <template>
   <div class="flex h-full min-h-0">
-    <GitRepoSidebar />
+    <GitRepoSidebar v-show="ui.leftSidebarOpen" />
     <GithubPrDetailView v-if="github.prDetail || github.loadingDetail" />
     <GitConflictHelper
       v-else-if="git.selected?.file.status === '!' && git.selected.repo"
@@ -69,7 +69,7 @@ onBeforeUnmount(() => unlistenFocus?.())
       :repo="git.selected.repo"
     />
     <GitDiffViewer v-else />
-    <GitCommitPanel />
+    <GitCommitPanel v-show="ui.rightPanelOpen" />
     <GithubCiLogsModal />
   </div>
 </template>

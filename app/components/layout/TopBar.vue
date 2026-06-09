@@ -18,8 +18,26 @@ function newSession() {
 <template>
   <header
     data-tauri-drag-region
-    class="relative flex items-center h-12 shrink-0 gap-2 px-3 border-b border-default select-none"
+    class="relative flex items-center h-12 shrink-0 gap-1 px-3 border-b border-default select-none"
   >
+    <UTooltip
+      v-if="ui.view === 'changes'"
+      text="Toggle sidebar"
+      :content="{ side: 'bottom' }"
+    >
+      <button
+        class="flex items-center justify-center size-7 rounded-md hover:bg-elevated/50 transition-colors"
+        :class="ui.leftSidebarOpen ? 'text-toned' : 'text-dimmed'"
+        aria-label="Toggle sidebar"
+        @click="ui.toggleLeftSidebar"
+      >
+        <UIcon
+          name="i-lucide-panel-left"
+          class="size-4"
+        />
+      </button>
+    </UTooltip>
+
     <LayoutWorkspaceSwitcher />
 
     <span
@@ -57,5 +75,23 @@ function newSession() {
       size="xs"
       @click="newSession"
     />
+
+    <UTooltip
+      v-if="ui.view === 'changes'"
+      text="Toggle commit panel"
+      :content="{ side: 'bottom' }"
+    >
+      <button
+        class="flex items-center justify-center size-7 rounded-md hover:bg-elevated/50 transition-colors"
+        :class="ui.rightPanelOpen ? 'text-toned' : 'text-dimmed'"
+        aria-label="Toggle commit panel"
+        @click="ui.toggleRightPanel"
+      >
+        <UIcon
+          name="i-lucide-panel-right"
+          class="size-4"
+        />
+      </button>
+    </UTooltip>
   </header>
 </template>
