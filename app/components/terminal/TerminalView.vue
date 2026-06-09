@@ -334,7 +334,7 @@ const dropOverlayStyle = computed(() => {
 
 <template>
   <div class="flex h-full min-h-0">
-    <TerminalSessionSidebar />
+    <TerminalSessionSidebar v-show="ui.leftSidebarOpen" />
 
     <div class="flex flex-col flex-1 min-w-0">
       <!-- PR Cockpit: repo state for the focused session, always visible -->

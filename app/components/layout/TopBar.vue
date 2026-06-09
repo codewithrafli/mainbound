@@ -21,7 +21,6 @@ function newSession() {
     class="relative flex items-center h-12 shrink-0 gap-1 px-3 border-b border-default select-none"
   >
     <UTooltip
-      v-if="ui.view === 'changes'"
       text="Toggle sidebar"
       :content="{ side: 'bottom' }"
     >
