@@ -9,12 +9,14 @@ const hasChanges = computed(() =>
 )
 
 const stepLabel: Record<string, string> = {
-  staging:    '⟳ Staging all…',
-  generating: '✨ Generating message…',
-  committing: '⟳ Committing…',
-  pushing:    '⟳ Pushing…',
-  done:       '✓ Shipped!'
+  staging:    'Staging…',
+  generating: 'Writing message…',
+  committing: 'Committing…',
+  pushing:    'Pushing…',
+  done:       'Shipped'
 }
+
+const busy = computed(() => !!git.shipStep && git.shipStep !== 'done')
 
 async function ship() {
   if (!git.selectedRepo || git.shipStep) return
@@ -24,8 +26,8 @@ async function ship() {
   })
   if (ok) {
     toast.add({
-      title: 'Shipped! 🚀',
-      description: settings.value.autoDraftPr ? 'Committed, pushed, and draft PR created.' : 'Committed and pushed.',
+      title: 'Shipped',
+      description: settings.value.autoDraftPr ? 'Committed, pushed, draft PR created.' : 'Committed and pushed.',
       icon: 'i-lucide-rocket',
       color: 'success'
     })
@@ -36,39 +38,38 @@ async function ship() {
 </script>
 
 <template>
-  <div class="panel-card overflow-hidden">
-    <div class="px-3 py-2.5 space-y-2">
-      <div class="flex items-center gap-1.5 section-label">
-        <UIcon name="i-lucide-rocket" class="size-3" />
-        Ship It
-        <UTooltip
-          text="Stage all → AI commit message → Commit → Push"
-          :content="{ side: 'top' }"
-        >
-          <UIcon name="i-lucide-info" class="size-3 text-dimmed ml-auto" />
-        </UTooltip>
-      </div>
-
-      <p v-if="git.shipStep" class="text-[11px] font-mono text-amber-400 animate-pulse">
-        {{ stepLabel[git.shipStep] }}
-      </p>
-
-      <UButton
-        :label="git.shipStep ? stepLabel[git.shipStep]! : 'Ship It 🚀'"
-        class="w-full btn-gradient"
-        :disabled="!hasChanges || !!git.shipStep || git.gitBusy"
-        :loading="!!git.shipStep && git.shipStep !== 'done'"
-        @click="ship"
+  <div class="space-y-1.5">
+    <button
+      class="group relative flex w-full items-center justify-center gap-2 rounded-lg py-2 text-[13px] font-medium
+             text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed
+             bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500
+             shadow-sm hover:shadow-md hover:shadow-fuchsia-500/20"
+      :disabled="!hasChanges || busy || git.gitBusy"
+      @click="ship"
+    >
+      <UIcon
+        :name="busy ? 'i-lucide-loader-circle' : 'i-lucide-rocket'"
+        class="size-3.5"
+        :class="busy ? 'animate-spin' : 'group-hover:-translate-y-0.5 transition-transform'"
       />
+      {{ git.shipStep ? stepLabel[git.shipStep] : 'Ship It' }}
+    </button>
 
-      <label class="flex items-center gap-2 cursor-pointer select-none">
+    <div class="flex items-center justify-between px-0.5">
+      <label class="flex items-center gap-1.5 cursor-pointer select-none">
         <input
           v-model="settings.autoDraftPr"
           type="checkbox"
-          class="size-3 accent-purple-500"
+          class="size-3 rounded accent-violet-500"
         >
-        <span class="text-[10.5px] text-muted">Auto-create draft PR on push</span>
+        <span class="text-[10.5px] text-dimmed">Auto draft PR</span>
       </label>
+      <UTooltip
+        text="Stage all → AI commit → Commit → Push"
+        :content="{ side: 'top' }"
+      >
+        <span class="text-[10px] text-dimmed">stage · commit · push</span>
+      </UTooltip>
     </div>
   </div>
 </template>
