@@ -9,11 +9,11 @@ const hasChanges = computed(() =>
 )
 
 const stepLabel: Record<string, string> = {
-  staging:    'Staging…',
+  staging: 'Staging…',
   generating: 'Writing message…',
   committing: 'Committing…',
-  pushing:    'Pushing…',
-  done:       'Shipped'
+  pushing: 'Pushing…',
+  done: 'Shipped'
 }
 
 const busy = computed(() => !!git.shipStep && git.shipStep !== 'done')
