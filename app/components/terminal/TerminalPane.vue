@@ -154,10 +154,52 @@ onMounted(async () => {
   })
   resizeObserver.observe(el.value!)
 
+  // Image paste: terminal CLIs that accept image attachments (Codex,
+  // Claude Code) detect an image file path in pasted input. When the
+  // clipboard holds an image, save it to a temp file and paste the path
+  // instead of letting xterm drop the binary data. (iTerm2/Ghostty/cmux
+  // do the same.)
+  el.value!.addEventListener('paste', onPaste, true)
+
   term.focus()
 })
 
+/** Intercept clipboard-image pastes; let normal text pastes through. */
+async function onPaste(event: ClipboardEvent) {
+  const items = event.clipboardData?.items
+  if (!items) return
+
+  const imageItem = Array.from(items).find(it => it.type.startsWith('image/'))
+  if (!imageItem) return // plain text paste — xterm handles it
+
+  // We're handling an image — stop xterm from processing the empty paste
+  event.preventDefault()
+  event.stopPropagation()
+
+  const file = imageItem.getAsFile()
+  if (!file) return
+
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    const ext = imageItem.type.split('/')[1] || 'png'
+    const path = await invoke<string>('save_clipboard_image', {
+      data: Array.from(bytes),
+      ext
+    })
+    // When the program has bracketed-paste mode on (Codex, Claude Code,
+    // modern shells), wrap the path in paste markers so it's treated as a
+    // paste — that's when image-path detection runs. Otherwise send the
+    // raw path so we don't inject literal escape garbage.
+    const bracketed = term?.modes.bracketedPasteMode
+    const payload = bracketed ? `\x1b[200~${path}\x1b[201~` : path
+    await invoke('pty_write', { id: props.sessionId, data: payload })
+  } catch (err) {
+    term?.writeln(`\r\n\x1b[31mimage paste failed: ${err}\x1b[0m`)
+  }
+}
+
 onBeforeUnmount(() => {
+  el.value?.removeEventListener('paste', onPaste, true)
   resizeObserver?.disconnect()
   unlisteners.forEach(off => off())
   notifications.forget(props.sessionId)
