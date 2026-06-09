@@ -23,6 +23,9 @@ jobs:
           # Windows — 64-bit
           - target: x86_64-pc-windows-msvc
             os: windows-latest
+          # Linux — 64-bit
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-22.04
 
     runs-on: ${{ matrix.os }}
 
@@ -38,6 +41,18 @@ jobs:
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+
+      # Tauri's Linux dependencies (webkit2gtk, etc.) + libsecret for keyring
+      - name: Install Linux system dependencies
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libsecret-1-dev
 
       - name: Install frontend dependencies
         run: bun install
@@ -87,4 +102,19 @@ jobs:
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: false
+          args: --target ${{ matrix.target }}
+
+      - name: Build and release (Linux)
+        if: matrix.os == 'ubuntu-22.04'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        with:
+          tagName: v__VERSION__
+          releaseName: "Mainbound v__VERSION__"
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
           args: --target ${{ matrix.target }}
