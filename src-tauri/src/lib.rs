@@ -175,6 +175,7 @@ pub fn run() {
       pty::pty_resize,
       pty::pty_kill,
       pty::pty_list,
+      pty::save_clipboard_image,
       git::git_branch,
       git::git_repo_root,
       git::git_branches,

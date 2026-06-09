@@ -226,6 +226,31 @@ pub fn pty_kill(state: State<'_, AppState>, id: String) -> AppResult<()> {
     Ok(())
 }
 
+/// Saves a pasted clipboard image to a temp file and returns its path.
+/// Terminal CLIs that accept image attachments (Codex, Claude Code) detect
+/// an image file path in pasted text — this is how iTerm2/Ghostty/cmux
+/// forward clipboard images to the running program.
+#[tauri::command]
+pub fn save_clipboard_image(data: Vec<u8>, ext: String) -> AppResult<String> {
+    // sanitize extension to a short alnum token
+    let ext = ext
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .take(5)
+        .collect::<String>();
+    let ext = if ext.is_empty() { "png".to_string() } else { ext };
+
+    let dir = std::env::temp_dir().join("mainbound-images");
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| AppError::Pty(format!("failed to create temp dir: {e}")))?;
+
+    let path = dir.join(format!("{}.{ext}", Uuid::new_v4()));
+    std::fs::write(&path, &data)
+        .map_err(|e| AppError::Pty(format!("failed to write image: {e}")))?;
+
+    Ok(path.to_string_lossy().into_owned())
+}
+
 #[tauri::command]
 pub fn pty_list(state: State<'_, AppState>) -> Vec<SessionMeta> {
     state
