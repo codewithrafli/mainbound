@@ -17,7 +17,10 @@ async function resolve(side: 'ours' | 'theirs') {
 </script>
 
 <template>
-  <div class="flex flex-col gap-3 p-4 h-full">
+  <div
+    class="flex-1 min-w-0 min-h-0 flex flex-col gap-3 p-4 overflow-auto"
+    style="min-width: 0; min-height: 0;"
+  >
     <div class="flex items-center gap-2">
       <UIcon
         name="i-lucide-triangle-alert"

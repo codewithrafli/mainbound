@@ -177,42 +177,6 @@ function checkDot(check: CheckRun): string {
   }
 }
 
-async function openCheck(check: CheckRun) {
-  // Try to open in-app CI logs first; fall back to browser
-  const repo = git.selectedRepo ?? github.prDetailRepo
-  if (repo && check.name) {
-    const pr = github.prDetail
-    if (pr) {
-      await github.loadWorkflowRuns(repo, pr.head_ref)
-      const run = github.workflowRuns.find(r =>
-        r.name === check.name || check.name.startsWith(r.name)
-      )
-      if (run) {
-        // Find matching job in this run
-        const { invoke } = await import('@tauri-apps/api/core')
-        const remote = await github.remoteInfo(repo)
-        if (remote) {
-          const jobs = await invoke<import('~/stores/github').WorkflowJob[]>('gh_workflow_jobs', {
-            owner: remote.owner,
-            name: remote.name,
-            runId: run.id
-          })
-          const job = jobs[0]
-          if (job) {
-            github.openJobLog(repo, run.id, job.id, job.name)
-            return
-          }
-        }
-      }
-    }
-  }
-  // fallback: open in browser
-  if (check.url) {
-    const { openUrl } = await import('@tauri-apps/plugin-opener')
-    await openUrl(check.url)
-  }
-}
-
 const stateBadge = computed(() => {
   if (!pr.value) return { label: '', color: 'neutral' as const }
   if (pr.value.merged) return { label: 'Merged', color: 'info' as const }
@@ -223,7 +187,10 @@ const stateBadge = computed(() => {
 </script>
 
 <template>
-  <section class="flex-1 min-w-0 flex flex-col bg-default">
+  <section
+    class="flex-1 min-w-0 min-h-0 flex flex-col bg-default"
+    style="min-width: 0; min-height: 0;"
+  >
     <div
       v-if="github.loadingDetail && !pr"
       class="flex flex-1 items-center justify-center"
