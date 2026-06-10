@@ -60,7 +60,10 @@ onBeforeUnmount(() => unlistenFocus?.())
 </script>
 
 <template>
-  <div class="flex h-full min-h-0">
+  <div
+    class="flex h-full min-h-0 min-w-0"
+    style="min-width: 0;"
+  >
     <GitRepoSidebar v-show="ui.leftSidebarOpen" />
     <GithubPrDetailView v-if="github.prDetail || github.loadingDetail" />
     <GitConflictHelper

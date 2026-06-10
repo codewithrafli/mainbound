@@ -333,7 +333,10 @@ const dropOverlayStyle = computed(() => {
 </script>
 
 <template>
-  <div class="flex h-full min-h-0">
+  <div
+    class="flex h-full min-h-0 min-w-0"
+    style="min-width: 0;"
+  >
     <TerminalSessionSidebar v-show="ui.leftSidebarOpen" />
 
     <div class="flex flex-col flex-1 min-w-0">

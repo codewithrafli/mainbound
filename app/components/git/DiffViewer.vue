@@ -28,7 +28,10 @@ const data = computed(() => {
 </script>
 
 <template>
-  <section class="flex-1 min-w-0 overflow-auto bg-default">
+  <section
+    class="flex-1 min-w-0 min-h-0 overflow-auto bg-default"
+    style="min-width: 0; min-height: 0;"
+  >
     <template v-if="git.selected">
       <div class="sticky top-0 z-10 flex items-center gap-2 px-4 py-2 border-b border-default bg-muted/95 backdrop-blur text-xs">
         <GitStatusBadge :status="git.selected.file.status" />
