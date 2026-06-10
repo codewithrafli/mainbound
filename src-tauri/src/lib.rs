@@ -121,7 +121,12 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
   let menu = MenuBuilder::new(app)
     .items(&[&app_menu, &edit, &shell, &view, &window])
     .build()?;
+  // Windows: don't attach a native menu bar — it clutters the frameless
+  // window. Shortcuts run in JS and actions live in the custom top bar.
+  #[cfg(not(target_os = "windows"))]
   app.set_menu(menu)?;
+  #[cfg(target_os = "windows")]
+  let _ = menu;
   app.on_menu_event(|app, event| {
     let id = event.id().0.as_str();
     match id {
