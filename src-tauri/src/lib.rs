@@ -259,9 +259,12 @@ pub fn run() {
         let _ = w.set_title(""); // hides the text next to traffic lights
       }
 
-      // Windows: make sure the window is visible and properly sized
+      // Windows: frameless window (no native title bar) so our custom top
+      // bar + window controls give the same clean look as macOS. The OS
+      // still handles edge-resize hit-testing for undecorated windows.
       #[cfg(target_os = "windows")]
       if let Some(w) = &window {
+        let _ = w.set_decorations(false);
         let _ = w.show();
         let _ = w.set_focus();
       }

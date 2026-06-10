@@ -2,7 +2,7 @@
 const ui = useUiStore()
 const terminals = useTerminalsStore()
 const workspaces = useWorkspacesStore()
-const { cmdKey } = usePlatform()
+const { cmdKey, isWindows } = usePlatform()
 
 const views = computed(() => [
   { id: 'terminal' as const, label: 'Terminal', kbd: `${cmdKey.value}1` },
@@ -92,5 +92,11 @@ function newSession() {
         />
       </button>
     </UTooltip>
+
+    <!-- custom window controls on frameless Windows -->
+    <LayoutWindowControls
+      v-if="isWindows"
+      class="ml-1"
+    />
   </header>
 </template>
