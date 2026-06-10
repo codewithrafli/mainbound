@@ -51,12 +51,31 @@ fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\"'\"'"))
 }
 
+/// Builds a login-shell command that runs `script` with the user's PATH/rc
+/// loaded, so CLIs installed via nvm/homebrew/etc. are found.
+/// - macOS/Linux: `$SHELL -lc "<script>"` (falls back to /bin/sh)
+/// - Windows: `powershell -Command "<script>"`
+fn login_shell(script: &str) -> Command {
+    #[cfg(target_os = "windows")]
+    {
+        let mut cmd = Command::new("powershell.exe");
+        cmd.args(["-NoProfile", "-Command", script]);
+        cmd
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
+        let mut cmd = Command::new(shell);
+        cmd.args(["-lc", script]);
+        cmd
+    }
+}
+
 /// Runs the user's `claude` CLI with the prompt on stdin. Spawned via a
 /// login shell so the CLI is found on the user's PATH; cwd is the repo
 /// so the model sees project context.
 fn run_claude(repo: &str, prompt: &str) -> AppResult<String> {
-    let mut child = Command::new("/bin/zsh")
-        .args(["-lc", "claude -p --model haiku --output-format text"])
+    let mut child = login_shell("claude -p --model haiku --output-format text")
         .current_dir(repo)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -93,8 +112,7 @@ fn run_codex(repo: &str, prompt: &str) -> AppResult<String> {
         shell_quote(out_path.to_string_lossy().as_ref())
     );
 
-    let mut child = Command::new("/bin/zsh")
-        .args(["-lc", &command])
+    let mut child = login_shell(&command)
         .current_dir(repo)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

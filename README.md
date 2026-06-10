@@ -18,7 +18,7 @@
   <a href="https://github.com/codewithrafli/mainbound/releases">
     <img src="https://img.shields.io/github/downloads/codewithrafli/mainbound/total?style=flat-square&color=d946ef" alt="Downloads" />
   </a>
-  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-0e0e10?style=flat-square" alt="macOS & Windows" />
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-0e0e10?style=flat-square" alt="macOS, Windows & Linux" />
   <img src="https://img.shields.io/badge/built_with-Tauri_2-24c8db?style=flat-square" alt="Tauri 2" />
 </p>
 
@@ -118,6 +118,22 @@ Download the `.msi` installer from [**Releases**](https://github.com/codewithraf
 Run the installer — no extra steps needed.
 
 > **Requirements:** Git for Windows and PowerShell 7+ (`winget install Microsoft.PowerShell`) recommended for the best terminal experience.
+
+### Linux
+
+Download the `.AppImage` (portable) or `.deb` from [**Releases**](https://github.com/codewithrafli/mainbound/releases/latest) (x64).
+
+```bash
+# AppImage — make executable and run
+chmod +x Mainbound_*.AppImage
+./Mainbound_*.AppImage
+
+# or .deb (Debian/Ubuntu)
+sudo dpkg -i Mainbound_*.deb
+```
+
+> **Requirements:** `libwebkit2gtk-4.1`, `libsecret` (for the keyring). Most
+> desktop distros ship these; install via your package manager if missing.
 
 ---
 

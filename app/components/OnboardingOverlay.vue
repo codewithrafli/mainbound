@@ -62,13 +62,17 @@ const shortcuts = [
         <p class="text-[12px] text-muted">
           A folder with your projects — Mainbound finds every git repo inside it.
         </p>
-        <button
-          class="btn-gradient w-full rounded-lg py-2 text-[13px] font-semibold transition disabled:opacity-60"
+        <UButton
+          :label="adding ? 'Opening…' : 'Choose Workspace Folder'"
+          icon="i-lucide-folder-plus"
+          color="neutral"
+          variant="solid"
+          size="sm"
+          block
+          :loading="adding"
           :disabled="adding"
           @click="addWorkspace"
-        >
-          {{ adding ? 'Opening…' : 'Choose Workspace Folder' }}
-        </button>
+        />
       </div>
 
       <!-- step 2 -->

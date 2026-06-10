@@ -19,6 +19,7 @@ const emit = defineEmits<{
 
 const notifications = useNotificationsStore()
 const { settings } = useSettingsStore()
+const { isLinux } = usePlatform()
 const el = ref<HTMLDivElement>()
 
 let term: Terminal | undefined
@@ -65,18 +66,23 @@ onMounted(async () => {
   term.loadAddon(search)
   term.open(el.value!)
 
-  // Renderer: try WebGL → Canvas → DOM (in order of performance)
+  // Renderer: try WebGL → Canvas → DOM (in order of performance).
+  // On Linux, SKIP WebGL entirely: the WebKitGTK WebGL path leaks GPU
+  // memory catastrophically (WebKitWebProcess → tens of GB → OOM kill)
+  // and mis-composites the layout. Canvas is stable there.
   let rendererLoaded = false
-  try {
-    const webgl = new WebglAddon()
-    // WebGL can throw or silently fail on some Windows GPU drivers
-    webgl.onContextLoss(() => {
-      webgl.dispose()
-    })
-    term.loadAddon(webgl)
-    rendererLoaded = true
-  } catch {
-    // WebGL failed — try Canvas
+  if (!isLinux.value) {
+    try {
+      const webgl = new WebglAddon()
+      // WebGL can throw or silently fail on some Windows GPU drivers
+      webgl.onContextLoss(() => {
+        webgl.dispose()
+      })
+      term.loadAddon(webgl)
+      rendererLoaded = true
+    } catch {
+      // WebGL failed — try Canvas
+    }
   }
   if (!rendererLoaded) {
     try {

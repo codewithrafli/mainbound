@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { invoke } from '@tauri-apps/api/core'
+import type { DropdownMenuItem } from '@nuxt/ui'
 
 const git = useGitStore()
 const github = useGithubStore()
 const toast = useToast()
 const { settings } = storeToRefs(useSettingsStore())
+
+const advancedOpen = ref(false)
 
 async function doPush() {
   if (!git.selectedRepo) return
@@ -48,10 +51,57 @@ async function doCommit() {
   }
 }
 
+async function doCommitAndPush() {
+  if (!canCommit.value || !git.selectedRepo) return
+  const repo = git.selectedRepo
+  const ok = await git.commit(repo, summary.value.trim(), description.value.trim())
+  if (ok) {
+    summary.value = ''
+    description.value = ''
+    await github.push(repo, { autoDraft: settings.value.autoDraftPr })
+    git.refresh(repo)
+  }
+}
+
+async function doShipIt() {
+  if (!git.selectedRepo || git.shipStep) return
+  const repo = git.selectedRepo
+  const ok = await git.shipIt(repo, settings.value.aiProvider, async () => {
+    await github.push(repo, { autoDraft: settings.value.autoDraftPr })
+  })
+  if (ok) {
+    toast.add({
+      title: 'Shipped',
+      description: settings.value.autoDraftPr ? 'Committed, pushed, draft PR created.' : 'Committed and pushed.',
+      icon: 'i-lucide-rocket',
+      color: 'success'
+    })
+  } else if (git.shipError) {
+    toast.add({ title: 'Ship failed', description: git.shipError, color: 'error', icon: 'i-lucide-x-circle' })
+  }
+}
+
+function toggleAmend() {
+  amend.value = !amend.value
+}
+
+const commitMenu = computed<DropdownMenuItem[][]>(() => [[
+  { label: 'Ship It', icon: 'i-lucide-rocket', onSelect: doShipIt },
+  { label: 'Commit & Push', icon: 'i-lucide-arrow-up-from-line', onSelect: doCommitAndPush }
+], [
+  {
+    label: amend.value ? 'Cancel amend' : 'Amend last commit',
+    icon: 'i-lucide-pencil',
+    onSelect: toggleAmend
+  }
+]])
+
 const generating = ref(false)
 const aiError = ref<string | null>(null)
 let mounted = true
-onBeforeUnmount(() => { mounted = false })
+onBeforeUnmount(() => {
+  mounted = false
+})
 
 async function generateWithAi() {
   if (!git.selectedRepo || !git.status?.staged.length || generating.value) return
@@ -89,15 +139,6 @@ watch(() => git.selectedRepo, (repo) => {
   <aside class="flex flex-col w-72 shrink-0 border-l border-default bg-muted/40 overflow-y-auto">
     <template v-if="git.status">
       <div class="p-2 space-y-2">
-        <!-- Ship It -->
-        <GitShipItButton />
-
-        <!-- Bulk staging — shown when many files changed -->
-        <GitBulkStaging />
-
-        <!-- Checkpoint -->
-        <GitCheckpoint />
-
         <!-- branch card -->
         <div class="panel-card px-3 py-2.5">
           <div class="flex items-center gap-2">
@@ -202,23 +243,17 @@ watch(() => git.selectedRepo, (repo) => {
               class="size-3"
             />
             Commit
-            <!-- amend toggle -->
-            <UTooltip
-              text="Amend last commit"
-              :content="{ side: 'top' }"
+            <span class="font-mono text-dimmed">{{ git.status.staged.length }}</span>
+            <span
+              v-if="amend"
+              class="ml-auto flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400"
             >
-              <button
-                class="ml-auto flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded transition-colors"
-                :class="amend ? 'bg-amber-500/20 text-amber-400' : 'text-dimmed hover:text-toned'"
-                @click="amend = !amend"
-              >
-                <UIcon
-                  name="i-lucide-pencil"
-                  class="size-2.5"
-                />
-                Amend
-              </button>
-            </UTooltip>
+              <UIcon
+                name="i-lucide-pencil"
+                class="size-2.5"
+              />
+              Amending
+            </span>
           </div>
           <div class="p-2.5 space-y-2">
             <UAlert
@@ -226,7 +261,7 @@ watch(() => git.selectedRepo, (repo) => {
               color="warning"
               variant="soft"
               icon="i-lucide-triangle-alert"
-              description="This will rewrite the last commit. Don't amend pushed commits."
+              description="This rewrites the last commit. Don't amend pushed commits."
               class="text-xs"
             />
             <UInput
@@ -264,16 +299,33 @@ watch(() => git.selectedRepo, (repo) => {
               :description="aiError"
               class="text-xs"
             />
-            <UButton
-              :label="amend ? 'Amend Commit' : 'Commit'"
-              color="neutral"
-              variant="solid"
-              size="sm"
-              block
-              :loading="git.committing"
-              :disabled="!canCommit"
-              @click="doCommit"
-            />
+            <!-- split button: Commit (primary) + dropdown of extra flows -->
+            <div class="flex gap-1">
+              <UButton
+                :label="git.shipStep ? 'Shipping…' : (amend ? 'Amend Commit' : 'Commit')"
+                color="primary"
+                variant="solid"
+                size="sm"
+                block
+                class="flex-1"
+                :loading="git.committing || (!!git.shipStep && git.shipStep !== 'done')"
+                :disabled="!canCommit && !git.shipStep"
+                @click="doCommit"
+              />
+              <UDropdownMenu
+                :items="commitMenu"
+                :content="{ align: 'end' }"
+                :ui="{ content: 'w-48' }"
+              >
+                <UButton
+                  icon="i-lucide-chevron-down"
+                  color="primary"
+                  variant="solid"
+                  size="sm"
+                  aria-label="More commit actions"
+                />
+              </UDropdownMenu>
+            </div>
             <UAlert
               v-if="git.error"
               color="error"
@@ -283,9 +335,6 @@ watch(() => git.selectedRepo, (repo) => {
             />
           </div>
         </div>
-
-        <!-- stash manager -->
-        <GitStashManager />
 
         <!-- history card -->
         <div class="panel-card overflow-hidden">
@@ -340,6 +389,27 @@ watch(() => git.selectedRepo, (repo) => {
 
         <!-- issues -->
         <GithubIssueSection />
+
+        <!-- advanced tools, tucked away to keep the panel clean -->
+        <button
+          class="flex items-center gap-1.5 w-full px-1 pt-1 section-label hover:text-toned transition-colors"
+          @click="advancedOpen = !advancedOpen"
+        >
+          <UIcon
+            :name="advancedOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+            class="size-3"
+          />
+          <UIcon
+            name="i-lucide-wrench"
+            class="size-3"
+          />
+          Advanced
+        </button>
+        <template v-if="advancedOpen">
+          <GitBulkStaging />
+          <GitCheckpoint />
+          <GitStashManager />
+        </template>
       </div>
     </template>
 
