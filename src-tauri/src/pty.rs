@@ -15,6 +15,8 @@ pub struct PtySession {
     pub killer: Box<dyn ChildKiller + Send + Sync>,
     pub cwd: PathBuf,
     pub title: String,
+    /// OS pid of the spawned shell; used to read its live cwd as the user `cd`s.
+    pub pid: Option<u32>,
 }
 
 #[derive(Serialize, Clone)]
@@ -121,6 +123,7 @@ pub fn pty_spawn(
     drop(pair.slave);
 
     let killer = child.clone_killer();
+    let pid = child.process_id();
     let writer = pair
         .master
         .take_writer()
@@ -142,6 +145,7 @@ pub fn pty_spawn(
             killer,
             cwd,
             title,
+            pid,
         },
     );
 
@@ -262,6 +266,49 @@ pub fn save_clipboard_image(data: Vec<u8>, ext: String) -> AppResult<String> {
         .map_err(|e| AppError::Pty(format!("failed to write image: {e}")))?;
 
     Ok(path.to_string_lossy().into_owned())
+}
+
+/// Reads a process's current working directory by pid. The shell's cwd
+/// changes as the user `cd`s, so this reflects where they actually are —
+/// used for live git-branch resolution, splitting into the same folder,
+/// and persisting an accurate layout for restore-on-launch.
+#[cfg(target_os = "macos")]
+fn cwd_of_pid(pid: u32) -> Option<String> {
+    // `proc_pidinfo(PROC_PIDVNODEPATHINFO)` needs root on macOS even for
+    // same-user children, so it can't read a shell's cwd. `lsof` can, with
+    // no privileges: `-Fn` prints the cwd on a line prefixed with `n`.
+    let out = std::process::Command::new("/usr/sbin/lsof")
+        .args(["-a", "-p", &pid.to_string(), "-d", "cwd", "-Fn"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .find_map(|line| line.strip_prefix('n'))
+        .map(|p| p.to_string())
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn cwd_of_pid(pid: u32) -> Option<String> {
+    std::fs::read_link(format!("/proc/{pid}/cwd"))
+        .ok()
+        .map(|p| p.to_string_lossy().into_owned())
+}
+
+#[cfg(windows)]
+fn cwd_of_pid(_pid: u32) -> Option<String> {
+    // No cheap pid→cwd path on Windows; callers keep the last known cwd.
+    None
+}
+
+/// Live working directory of a session's shell, or `None` if it can't be
+/// resolved (process gone, unsupported platform).
+#[tauri::command]
+pub fn pty_cwd(state: State<'_, AppState>, id: String) -> Option<String> {
+    let pid = state.sessions.lock().get(&id).and_then(|s| s.pid)?;
+    cwd_of_pid(pid)
 }
 
 #[tauri::command]

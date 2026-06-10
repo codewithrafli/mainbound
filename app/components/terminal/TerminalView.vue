@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { invoke } from '@tauri-apps/api/core'
-import type { PaneNode, PaneSplit, SavedTab } from '~/stores/terminals'
+import type { PaneNode, PaneSplit, SavedLayout, SavedTab } from '~/stores/terminals'
 import { leavesOf } from '~/stores/terminals'
 
 const terminals = useTerminalsStore()
@@ -11,8 +11,9 @@ const ui = useUiStore()
 onMounted(async () => {
   await workspaces.init()
   if (terminals.tabs.length) return // HMR remount — already live
-  const saved = await invoke<SavedTab[] | null>('sessions_load').catch(() => null)
-  if (Array.isArray(saved) && saved.length) {
+  const saved = await invoke<SavedLayout | SavedTab[] | null>('sessions_load').catch(() => null)
+  const savedTabs = Array.isArray(saved) ? saved : saved?.tabs
+  if (saved && savedTabs?.length) {
     terminals.restore(saved)
   } else if (workspaces.list.length) {
     terminals.create(workspaces.active?.path ?? null, workspaces.active?.name)
@@ -120,10 +121,17 @@ watch(() => terminals.tabs, () => {
 // Flush on quit/close. Tauri fires onCloseRequested on Cmd+Q / window close
 // and on OS shutdown; the webview also fires pagehide. Cover both.
 let unlistenClose: (() => void) | undefined
+
+// Poll the live cwd of every shell so the git-branch in the sidebar follows
+// `cd`, and so the persisted layout reflects where each pane actually is.
+let cwdTimer: ReturnType<typeof setInterval> | undefined
+
 onMounted(async () => {
   // save when the webview is being torn down (covers reload + some quits)
   window.addEventListener('pagehide', flushSave)
   window.addEventListener('beforeunload', flushSave)
+
+  cwdTimer = setInterval(() => { terminals.refreshAllCwds() }, 2_000)
 
   const { getCurrentWindow } = await import('@tauri-apps/api/window')
   const win = getCurrentWindow()
@@ -131,6 +139,7 @@ onMounted(async () => {
     // hold the close so the synchronous disk write completes, then destroy
     event.preventDefault()
     try {
+      await terminals.refreshAllCwds()
       flushSave()
       const { saveWindowState, StateFlags } = await import('@tauri-apps/plugin-window-state')
       await saveWindowState(StateFlags.ALL)
@@ -142,6 +151,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   window.removeEventListener('pagehide', flushSave)
   window.removeEventListener('beforeunload', flushSave)
+  clearInterval(cwdTimer)
   unlistenClose?.()
 })
 
