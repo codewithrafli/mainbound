@@ -100,14 +100,50 @@ function paneMenuItems(sessionId: string) {
   ]]
 }
 
-// Persist the layout (debounced) whenever tabs/splits/cwds change
+// Persist the layout. Debounced for frequent changes, but always flushed
+// immediately when the window closes / the app quits — otherwise a pending
+// debounce is lost on shutdown and the layout "resets" on next launch.
 let saveTimer: ReturnType<typeof setTimeout> | undefined
+
+function flushSave() {
+  clearTimeout(saveTimer)
+  saveTimer = undefined
+  // fire-and-forget; the Rust side writes to disk synchronously
+  invoke('sessions_save', { data: terminals.serialize() }).catch(() => {})
+}
+
 watch(() => terminals.tabs, () => {
   clearTimeout(saveTimer)
-  saveTimer = setTimeout(() => {
-    invoke('sessions_save', { data: terminals.serialize() }).catch(() => {})
-  }, 1_000)
+  saveTimer = setTimeout(flushSave, 1_000)
 }, { deep: true })
+
+// Flush on quit/close. Tauri fires onCloseRequested on Cmd+Q / window close
+// and on OS shutdown; the webview also fires pagehide. Cover both.
+let unlistenClose: (() => void) | undefined
+onMounted(async () => {
+  // save when the webview is being torn down (covers reload + some quits)
+  window.addEventListener('pagehide', flushSave)
+  window.addEventListener('beforeunload', flushSave)
+
+  const { getCurrentWindow } = await import('@tauri-apps/api/window')
+  const win = getCurrentWindow()
+  unlistenClose = await win.onCloseRequested(async (event) => {
+    // hold the close so the synchronous disk write completes, then destroy
+    event.preventDefault()
+    try {
+      flushSave()
+      const { saveWindowState, StateFlags } = await import('@tauri-apps/plugin-window-state')
+      await saveWindowState(StateFlags.ALL)
+    } catch { /* never block the close on a save error */ }
+    await win.destroy()
+  })
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('pagehide', flushSave)
+  window.removeEventListener('beforeunload', flushSave)
+  unlistenClose?.()
+})
 
 const area = ref<HTMLDivElement>()
 
