@@ -12,11 +12,18 @@ export function usePlatform() {
     return navigator.platform.toUpperCase().includes('WIN')
   })
 
+  const isLinux = computed(() => {
+    if (typeof navigator === 'undefined') return false
+    const p = navigator.platform.toUpperCase()
+    return p.includes('LINUX') || p.includes('X11')
+      || (!isMac.value && !isWindows.value && navigator.userAgent.includes('Linux'))
+  })
+
   /** Show ⌘ on Mac, Ctrl on Windows/Linux */
   const cmdKey = computed(() => isMac.value ? '⌘' : 'Ctrl')
 
   /** Modifier key label for display (⌥ on Mac, Alt on Windows) */
   const altKey = computed(() => isMac.value ? '⌥' : 'Alt')
 
-  return { isMac, isWindows, cmdKey, altKey }
+  return { isMac, isWindows, isLinux, cmdKey, altKey }
 }

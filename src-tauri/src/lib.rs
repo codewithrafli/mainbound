@@ -157,6 +157,18 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+  // WebKitGTK on Linux leaks GPU memory catastrophically with the DMA-BUF
+  // renderer (WebKitWebProcess balloons to tens of GB → OOM kill) and
+  // mis-composites layers (broken layout). Disabling the DMA-BUF renderer is
+  // the upstream-recommended workaround. Must be set before the webview
+  // process spawns. (Set on Linux only; harmless no-op elsewhere.)
+  #[cfg(target_os = "linux")]
+  {
+    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+      std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
+  }
+
   tauri::Builder::default()
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_dialog::init())
