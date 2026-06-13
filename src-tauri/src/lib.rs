@@ -244,6 +244,7 @@ pub fn run() {
       workspace::workspace_list,
       workspace::workspace_add,
       workspace::workspace_remove,
+      workspace::workspace_reorder,
       workspace::workspace_set_last,
       workspace::repo_scan,
       workspace::sessions_save,

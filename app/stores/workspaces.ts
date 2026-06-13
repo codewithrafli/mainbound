@@ -65,6 +65,30 @@ export const useWorkspacesStore = defineStore('workspaces', () => {
     await scan()
   }
 
+  async function reorder(ids: string[]) {
+    const byId = new Map(list.value.map(workspace => [workspace.id, workspace]))
+    const next = ids
+      .map(id => byId.get(id))
+      .filter((workspace): workspace is Workspace => !!workspace)
+    const seen = new Set(next.map(workspace => workspace.id))
+    next.push(...list.value.filter(workspace => !seen.has(workspace.id)))
+    list.value = next
+    await invoke('workspace_reorder', { ids: next.map(workspace => workspace.id) })
+  }
+
+  async function move(id: string, direction: -1 | 1) {
+    const index = list.value.findIndex(w => w.id === id)
+    const target = index + direction
+    if (index < 0 || target < 0 || target >= list.value.length) return
+    const next = [...list.value]
+    const current = next[index]
+    const other = next[target]
+    if (!current || !other) return
+    next[index] = other
+    next[target] = current
+    await reorder(next.map(w => w.id))
+  }
+
   async function remove(id: string) {
     await invoke('workspace_remove', { id })
     list.value = list.value.filter(w => w.id !== id)
@@ -79,5 +103,5 @@ export const useWorkspacesStore = defineStore('workspaces', () => {
     return repos.value.some(r => r.path === repoPath)
   }
 
-  return { list, activeId, active, repos, scanning, initialized, init, add, setActive, remove, scan, hasRepo }
+  return { list, activeId, active, repos, scanning, initialized, init, add, setActive, reorder, move, remove, scan, hasRepo }
 })

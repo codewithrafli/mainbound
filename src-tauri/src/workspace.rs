@@ -99,6 +99,23 @@ pub fn workspace_remove(state: State<'_, AppState>, id: String) -> AppResult<()>
 }
 
 #[tauri::command]
+pub fn workspace_reorder(state: State<'_, AppState>, ids: Vec<String>) -> AppResult<()> {
+    let mut store = state.store.lock();
+    let mut ordered = Vec::with_capacity(store.workspaces.len());
+
+    for id in ids {
+        if let Some(index) = store.workspaces.iter().position(|w| w.id == id) {
+            ordered.push(store.workspaces.remove(index));
+        }
+    }
+
+    // Preserve any workspace omitted by an older frontend or stale call.
+    ordered.append(&mut store.workspaces);
+    store.workspaces = ordered;
+    store::save(&store)
+}
+
+#[tauri::command]
 pub fn workspace_set_last(state: State<'_, AppState>, id: String) -> AppResult<()> {
     let mut store = state.store.lock();
     store.last_workspace = Some(id);

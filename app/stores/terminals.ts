@@ -365,6 +365,15 @@ export const useTerminalsStore = defineStore('terminals', () => {
     }
   }
 
+  async function killWorkspace(workspaceId: string) {
+    const tabIds = tabs.value
+      .filter(tab => tab.workspaceId === workspaceId)
+      .map(tab => tab.id)
+    for (const tabId of tabIds) {
+      await killTab(tabId)
+    }
+  }
+
   function setActiveTab(id: string) {
     activeTabId.value = id
   }
@@ -437,7 +446,9 @@ export const useTerminalsStore = defineStore('terminals', () => {
       const workspaceId = savedTab.workspaceId ?? null
       if (workspaceId && !knownWorkspaces.has(workspaceId)) return
       let focusedLeaf: string | null = null
-      const root = restoreNode(savedTab.root, (id) => { focusedLeaf = id })
+      const root = restoreNode(savedTab.root, (id) => {
+        focusedLeaf = id
+      })
       const tab: TerminalTab = {
         id: crypto.randomUUID(),
         title: savedTab.title,
@@ -473,7 +484,7 @@ export const useTerminalsStore = defineStore('terminals', () => {
     sessions, tabs, visibleTabs, activeTabId, focusedByTab, draggingTabId, draggingSessionId,
     activeTab, focusedSessionId, paneCount,
     create, split, splitPane, moveTabIntoPane, movePaneIntoPane,
-    closePane, kill, killTab, setActiveTab, focusPane,
+    closePane, kill, killTab, killWorkspace, setActiveTab, focusPane,
     refreshCwd, refreshAllCwds,
     serialize, restore
   }
