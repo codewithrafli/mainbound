@@ -1,6 +1,56 @@
 <script setup lang="ts">
+import { invoke } from '@tauri-apps/api/core'
+
 const { settings, modalOpen } = storeToRefs(useSettingsStore())
 const updater = useUpdaterStore()
+const toast = useToast()
+
+const speechLanguages = [
+  { label: 'Auto / mixed', value: 'auto' },
+  { label: 'Indonesian', value: 'id' },
+  { label: 'English', value: 'en' },
+  { label: 'Japanese', value: 'ja' },
+  { label: 'Korean', value: 'ko' },
+  { label: 'Mandarin', value: 'zh' }
+]
+
+const speechProviders = [
+  { label: 'Groq Whisper (BYOK)', value: 'groq' },
+  { label: 'Browser Speech', value: 'browser' }
+]
+
+const groqKey = ref('')
+const groqKeyConfigured = ref(false)
+const savingGroqKey = ref(false)
+
+async function refreshGroqStatus() {
+  const status = await invoke<{ configured: boolean }>('speech_groq_key_status').catch(() => null)
+  groqKeyConfigured.value = !!status?.configured
+}
+
+async function saveGroqKey() {
+  if (!groqKey.value.trim()) return
+  savingGroqKey.value = true
+  try {
+    await invoke('speech_groq_set_key', { key: groqKey.value })
+    groqKey.value = ''
+    await refreshGroqStatus()
+    toast.add({ title: 'Groq key saved', icon: 'i-lucide-key-round' })
+  } catch (error) {
+    toast.add({ title: 'Failed to save Groq key', description: String(error), color: 'error' })
+  } finally {
+    savingGroqKey.value = false
+  }
+}
+
+async function clearGroqKey() {
+  await invoke('speech_groq_clear_key').catch(() => {})
+  await refreshGroqStatus()
+}
+
+watch(modalOpen, (open) => {
+  if (open) refreshGroqStatus()
+})
 </script>
 
 <template>
@@ -116,18 +166,78 @@ const updater = useUpdaterStore()
           <div class="flex items-center justify-between gap-4">
             <div>
               <p class="text-[13px] text-toned">
-                Dictation language
+                Provider
               </p>
               <p class="text-[11px] text-dimmed">
-                Used by terminal speech-to-text · empty = system default
+                Groq handles mixed Indonesian-English better
               </p>
             </div>
-            <UInput
-              v-model="settings.speechLanguage"
-              placeholder="en-US"
+            <USelect
+              v-model="settings.speechProvider"
+              :items="speechProviders"
               size="sm"
-              class="w-28 font-mono"
+              class="w-44"
             />
+          </div>
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <p class="text-[13px] text-toned">
+                Language hint
+              </p>
+              <p class="text-[11px] text-dimmed">
+                Auto works best for mixed speech
+              </p>
+            </div>
+            <USelect
+              v-model="settings.speechLanguage"
+              :items="speechLanguages"
+              size="sm"
+              class="w-36"
+            />
+          </div>
+          <div
+            v-if="settings.speechProvider === 'groq'"
+            class="rounded-lg border border-default bg-muted/30 p-2.5 space-y-2"
+          >
+            <div class="flex items-center gap-2 text-[12px]">
+              <UIcon
+                :name="groqKeyConfigured ? 'i-lucide-check-circle' : 'i-lucide-key-round'"
+                class="size-3.5"
+                :class="groqKeyConfigured ? 'text-green-500' : 'text-dimmed'"
+              />
+              <span :class="groqKeyConfigured ? 'text-toned' : 'text-muted'">
+                {{ groqKeyConfigured ? 'Groq key configured' : 'Groq key required' }}
+              </span>
+            </div>
+            <div class="flex gap-1.5">
+              <UInput
+                v-model="groqKey"
+                type="password"
+                placeholder="gsk_..."
+                size="sm"
+                class="min-w-0 flex-1 font-mono"
+                @keydown.enter="saveGroqKey"
+              />
+              <UButton
+                icon="i-lucide-save"
+                color="neutral"
+                variant="solid"
+                size="sm"
+                aria-label="Save Groq key"
+                :loading="savingGroqKey"
+                :disabled="!groqKey.trim()"
+                @click="saveGroqKey"
+              />
+              <UButton
+                v-if="groqKeyConfigured"
+                icon="i-lucide-trash-2"
+                color="error"
+                variant="ghost"
+                size="sm"
+                aria-label="Clear Groq key"
+                @click="clearGroqKey"
+              />
+            </div>
           </div>
         </div>
 

@@ -51,6 +51,10 @@ interface SpeechRecognitionLike {
 }
 
 type SpeechRecognitionCtor = new () => SpeechRecognitionLike
+const SILENCE_COMMIT_MS = 2_800
+const GROQ_VOICE_THRESHOLD = 0.045
+const GROQ_MIN_AUTO_SPEECH_MS = 450
+const GROQ_SPECTRUM_BARS = 18
 
 const notifications = useNotificationsStore()
 const toast = useToast()
@@ -59,11 +63,27 @@ const { isLinux } = usePlatform()
 const el = ref<HTMLDivElement>()
 const dictating = ref(false)
 const dictationPreview = ref('')
+const transcribing = ref(false)
+const groqSpectrum = ref(Array.from({ length: GROQ_SPECTRUM_BARS }, () => 0.18))
 
 let term: Terminal | undefined
 let fit: FitAddon | undefined
 let search: SearchAddon | undefined
 let recognition: SpeechRecognitionLike | undefined
+let silenceTimer: ReturnType<typeof setTimeout> | undefined
+let pendingTranscript = ''
+let transcriptBuffer = ''
+let committedUtterance = false
+let stoppingDictation = false
+let mediaRecorder: MediaRecorder | undefined
+let mediaStream: MediaStream | undefined
+let audioContext: AudioContext | undefined
+let analyser: AnalyserNode | undefined
+let silenceFrame = 0
+let speechStartedAt: number | null = null
+let lastSpeechAt: number | null = null
+let manualGroqStop = false
+let recordedChunks: Blob[] = []
 let resizeObserver: ResizeObserver | undefined
 const unlisteners: UnlistenFn[] = []
 
@@ -251,23 +271,266 @@ function speechRecognitionCtor(): SpeechRecognitionCtor | null {
   return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition ?? null
 }
 
+function recognitionLang() {
+  const lang = settings.speechLanguage.trim()
+  if (lang === 'id') return 'id-ID'
+  if (lang === 'en') return 'en-US'
+  if (lang === 'ja') return 'ja-JP'
+  if (lang === 'ko') return 'ko-KR'
+  if (lang === 'zh') return 'zh-CN'
+  return navigator.language || 'en-US'
+}
+
+function normalizeDevSpeech(text: string) {
+  if (settings.speechProvider !== 'browser') return text
+
+  return text
+    .replace(/\b(frame work|frameworks|frimework|prem work|premwork)\b/gi, 'framework')
+    .replace(/\b(repositori|repository|repo sitori|repo story)\b/gi, 'repository')
+    .replace(/\b(pul request|pull reques|pull request|pool request|pur request)\b/gi, 'pull request')
+    .replace(/\b(branch|brens|brance|brans)\b/gi, 'branch')
+    .replace(/\b(komit|commit|komet)\b/gi, 'commit')
+    .replace(/\b(merge|merj|marge)\b/gi, 'merge')
+    .replace(/\b(push|pus)\b/gi, 'push')
+    .replace(/\b(deploy|diploy|di ploy)\b/gi, 'deploy')
+    .replace(/\b(front end|frontend)\b/gi, 'frontend')
+    .replace(/\b(back end|backend)\b/gi, 'backend')
+    .replace(/\b(open source|opensors|open sores)\b/gi, 'open source')
+    .replace(/\b(type script|typescript)\b/gi, 'TypeScript')
+    .replace(/\b(java script|javascript)\b/gi, 'JavaScript')
+    .replace(/\b(react js|react)\b/gi, 'React')
+    .replace(/\b(next js|next\.?js)\b/gi, 'Next.js')
+    .replace(/\b(nuxt js|nuxt\.?js)\b/gi, 'Nuxt')
+    .replace(/\b(vue js|view js|vue)\b/gi, 'Vue')
+    .replace(/\b(node js|node\.?js)\b/gi, 'Node.js')
+    .replace(/\b(tailwind|tail win|tailwind css)\b/gi, 'Tailwind CSS')
+    .replace(/\b(git hub|github)\b/gi, 'GitHub')
+    .replace(/\b(git lab|gitlab)\b/gi, 'GitLab')
+}
+
 async function writePastedText(text: string) {
-  if (!text) return
+  const normalized = normalizeDevSpeech(text).trim()
+  if (!normalized) return
   const bracketed = term?.modes.bracketedPasteMode
-  const payload = bracketed ? `\x1b[200~${text}\x1b[201~` : text
+  const payload = bracketed ? `\x1b[200~${normalized}\x1b[201~` : normalized
   await invoke('pty_write', { id: props.sessionId, data: payload })
 }
 
-function stopDictation() {
+function clearSilenceTimer() {
+  clearTimeout(silenceTimer)
+  silenceTimer = undefined
+}
+
+function flushPendingTranscript() {
+  const text = pendingTranscript.trim()
+  if (!text || committedUtterance) return
+  committedUtterance = true
+  stoppingDictation = true
+  pendingTranscript = ''
+  transcriptBuffer = ''
+  dictationPreview.value = ''
+  clearSilenceTimer()
+  writePastedText(text).catch(() => {})
   recognition?.stop()
 }
 
-function toggleDictation() {
-  if (dictating.value) {
-    stopDictation()
+function scheduleSilenceCommit() {
+  clearSilenceTimer()
+  silenceTimer = setTimeout(flushPendingTranscript, SILENCE_COMMIT_MS)
+}
+
+function stopDictation() {
+  if (settings.speechProvider === 'groq') {
+    stopGroqRecording(true)
+    return
+  }
+  stoppingDictation = true
+  flushPendingTranscript()
+  recognition?.stop()
+}
+
+function groqLanguageHint() {
+  const lang = settings.speechLanguage.trim()
+  return lang === 'auto' ? null : lang || null
+}
+
+function cleanupGroqRecording() {
+  cancelAnimationFrame(silenceFrame)
+  silenceFrame = 0
+  mediaStream?.getTracks().forEach(track => track.stop())
+  mediaStream = undefined
+  audioContext?.close().catch(() => {})
+  audioContext = undefined
+  analyser = undefined
+  speechStartedAt = null
+  lastSpeechAt = null
+  groqSpectrum.value = Array.from({ length: GROQ_SPECTRUM_BARS }, () => 0.18)
+}
+
+async function transcribeGroqAudio(blob: Blob) {
+  if (!blob.size) {
+    dictating.value = false
+    dictationPreview.value = ''
+    return
+  }
+  transcribing.value = true
+  dictationPreview.value = 'Transcribing…'
+  try {
+    const bytes = Array.from(new Uint8Array(await blob.arrayBuffer()))
+    const text = await invoke<string>('speech_groq_transcribe', {
+      audio: bytes,
+      mime: blob.type || 'audio/webm',
+      language: groqLanguageHint()
+    })
+    await writePastedText(text)
+  } catch (error) {
+    toast.add({
+      title: 'Groq transcription failed',
+      description: String(error),
+      icon: 'i-lucide-mic-off',
+      color: 'error'
+    })
+  } finally {
+    transcribing.value = false
+    dictating.value = false
+    dictationPreview.value = ''
+  }
+}
+
+function stopGroqRecording(manual = false) {
+  manualGroqStop = manual
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop()
+    return
+  }
+  cleanupGroqRecording()
+  dictating.value = false
+  dictationPreview.value = ''
+  manualGroqStop = false
+}
+
+function updateGroqSpectrum(data: Uint8Array) {
+  const samplesPerBar = Math.max(1, Math.floor(data.length / GROQ_SPECTRUM_BARS))
+  const levels = Array.from({ length: GROQ_SPECTRUM_BARS }, (_, bar) => {
+    let sum = 0
+    const start = bar * samplesPerBar
+    const end = Math.min(data.length, start + samplesPerBar)
+    for (let index = start; index < end; index += 1) {
+      const centered = Math.abs((data[index] ?? 128) - 128)
+      sum += centered * centered
+    }
+    const rms = Math.sqrt(sum / Math.max(1, end - start))
+    return Math.max(0.16, Math.min(1, rms / 36))
+  })
+  groqSpectrum.value = levels
+}
+
+function watchGroqSilence() {
+  if (!analyser || !dictating.value) return
+  const data = new Uint8Array(analyser.fftSize)
+  analyser.getByteTimeDomainData(data)
+  updateGroqSpectrum(data)
+  let sum = 0
+  for (const value of data) {
+    const centered = value - 128
+    sum += centered * centered
+  }
+  const volume = Math.sqrt(sum / data.length) / 128
+  const now = Date.now()
+
+  if (volume > GROQ_VOICE_THRESHOLD) {
+    speechStartedAt ??= now
+    lastSpeechAt = now
+    clearSilenceTimer()
+    dictationPreview.value = ''
+  } else if (speechStartedAt && lastSpeechAt && now - lastSpeechAt > 300 && !silenceTimer) {
+    silenceTimer = setTimeout(() => stopGroqRecording(false), SILENCE_COMMIT_MS)
+  }
+
+  silenceFrame = requestAnimationFrame(watchGroqSilence)
+}
+
+function preferredRecordingMime() {
+  return [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4',
+    'audio/ogg;codecs=opus',
+    'audio/ogg'
+  ].find(type => MediaRecorder.isTypeSupported(type)) ?? ''
+}
+
+async function startGroqRecording() {
+  if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+    toast.add({
+      title: 'Microphone unavailable',
+      description: 'This webview cannot record audio.',
+      icon: 'i-lucide-mic-off',
+      color: 'warning'
+    })
     return
   }
 
+  try {
+    const keyStatus = await invoke<{ configured: boolean }>('speech_groq_key_status').catch(() => null)
+    if (!keyStatus?.configured) {
+      toast.add({
+        title: 'Groq key required',
+        description: 'Open Settings and add your Groq API key first.',
+        icon: 'i-lucide-key-round',
+        color: 'warning'
+      })
+      return
+    }
+    recordedChunks = []
+    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    audioContext = new AudioContext()
+    analyser = audioContext.createAnalyser()
+    analyser.fftSize = 1024
+    audioContext.createMediaStreamSource(mediaStream).connect(analyser)
+    const mime = preferredRecordingMime()
+    mediaRecorder = mime
+      ? new MediaRecorder(mediaStream, { mimeType: mime })
+      : new MediaRecorder(mediaStream)
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size) recordedChunks.push(event.data)
+    }
+    mediaRecorder.onstop = () => {
+      const speechMs = speechStartedAt && lastSpeechAt ? lastSpeechAt - speechStartedAt : 0
+      const shouldTranscribe = Boolean(speechStartedAt && (manualGroqStop || speechMs >= GROQ_MIN_AUTO_SPEECH_MS))
+      const blob = new Blob(recordedChunks, { type: mediaRecorder?.mimeType || mime })
+      cleanupGroqRecording()
+      if (shouldTranscribe) {
+        transcribeGroqAudio(blob)
+      } else {
+        transcribing.value = false
+        dictating.value = false
+        dictationPreview.value = ''
+      }
+      mediaRecorder = undefined
+      manualGroqStop = false
+    }
+    dictating.value = true
+    dictationPreview.value = ''
+    speechStartedAt = null
+    lastSpeechAt = null
+    manualGroqStop = false
+    mediaRecorder.start(250)
+    watchGroqSilence()
+  } catch (error) {
+    cleanupGroqRecording()
+    dictating.value = false
+    dictationPreview.value = ''
+    toast.add({
+      title: 'Microphone failed',
+      description: String(error),
+      icon: 'i-lucide-mic-off',
+      color: 'error'
+    })
+  }
+}
+
+function createRecognition(): SpeechRecognitionLike | null {
   const Recognition = speechRecognitionCtor()
   if (!Recognition) {
     toast.add({
@@ -276,27 +539,45 @@ function toggleDictation() {
       icon: 'i-lucide-mic-off',
       color: 'warning'
     })
-    return
+    return null
   }
 
-  recognition?.abort()
-  dictationPreview.value = ''
-  recognition = new Recognition()
-  recognition.lang = settings.speechLanguage.trim() || navigator.language || 'en-US'
-  recognition.interimResults = true
-  recognition.continuous = false
-  recognition.maxAlternatives = 1
-  recognition.onstart = () => {
+  const next = new Recognition()
+  next.lang = recognitionLang()
+  next.interimResults = true
+  next.continuous = true
+  next.maxAlternatives = 1
+  next.onstart = () => {
     dictating.value = true
   }
-  recognition.onend = () => {
-    dictating.value = false
-    dictationPreview.value = ''
+  next.onend = () => {
     recognition = undefined
+    if (!dictating.value || stoppingDictation || committedUtterance) {
+      dictating.value = false
+      dictationPreview.value = ''
+      pendingTranscript = ''
+      transcriptBuffer = ''
+      clearSilenceTimer()
+      return
+    }
+    window.setTimeout(() => {
+      if (dictating.value && !recognition && !stoppingDictation && !committedUtterance) {
+        startRecognition()
+      }
+    }, 180)
   }
-  recognition.onerror = (event) => {
+  next.onerror = (event) => {
+    if (event.error === 'no-speech' && dictating.value && !stoppingDictation) {
+      recognition = undefined
+      startRecognition()
+      return
+    }
     dictating.value = false
     dictationPreview.value = ''
+    pendingTranscript = ''
+    transcriptBuffer = ''
+    clearSilenceTimer()
+    stoppingDictation = false
     recognition = undefined
     toast.add({
       title: 'Dictation failed',
@@ -305,7 +586,8 @@ function toggleDictation() {
       color: 'error'
     })
   }
-  recognition.onresult = (event) => {
+  next.onresult = (event) => {
+    if (committedUtterance) return
     let finalText = ''
     let interimText = ''
     for (let index = event.resultIndex; index < event.results.length; index += 1) {
@@ -314,16 +596,32 @@ function toggleDictation() {
       if (result?.isFinal) finalText += transcript
       else interimText += transcript
     }
-    dictationPreview.value = interimText.trim()
-    const text = finalText.trim()
-    if (text) writePastedText(text).catch(() => {})
+    if (finalText.trim()) {
+      transcriptBuffer = `${transcriptBuffer} ${finalText}`.trim()
+    }
+    pendingTranscript = normalizeDevSpeech(`${transcriptBuffer} ${interimText}`.trim())
+    dictationPreview.value = pendingTranscript
+    if (pendingTranscript) {
+      scheduleSilenceCommit()
+    }
   }
 
+  return next
+}
+
+function startRecognition() {
+  const next = createRecognition()
+  if (!next) return
+  recognition = next
   try {
     recognition.start()
   } catch (error) {
     recognition = undefined
     dictating.value = false
+    pendingTranscript = ''
+    transcriptBuffer = ''
+    clearSilenceTimer()
+    stoppingDictation = false
     toast.add({
       title: 'Dictation failed',
       description: String(error),
@@ -333,7 +631,32 @@ function toggleDictation() {
   }
 }
 
+function toggleDictation() {
+  if (transcribing.value) return
+  if (dictating.value) {
+    stopDictation()
+    return
+  }
+
+  if (settings.speechProvider === 'groq') {
+    startGroqRecording()
+    return
+  }
+
+  recognition?.abort()
+  dictationPreview.value = ''
+  pendingTranscript = ''
+  transcriptBuffer = ''
+  committedUtterance = false
+  stoppingDictation = false
+  clearSilenceTimer()
+  startRecognition()
+}
+
 onBeforeUnmount(() => {
+  stoppingDictation = true
+  clearSilenceTimer()
+  cleanupGroqRecording()
   recognition?.abort()
   el.value?.removeEventListener('paste', onPaste, true)
   resizeObserver?.disconnect()
@@ -367,7 +690,7 @@ function clearSearch() {
   search?.clearDecorations()
 }
 
-defineExpose({ focus, findNext, findPrevious, clearSearch, toggleDictation, dictating })
+defineExpose({ focus, findNext, findPrevious, clearSearch })
 </script>
 
 <template>
@@ -377,18 +700,62 @@ defineExpose({ focus, findNext, findPrevious, clearSearch, toggleDictation, dict
       ref="el"
       class="h-full w-full"
     />
-    <div
-      v-if="dictating"
-      class="pointer-events-none absolute bottom-2 left-3 right-3 z-20 flex items-center gap-2 rounded-md border border-blue-500/40 bg-[#101828]/95 px-2.5 py-1.5 text-[11px] text-blue-100 shadow-lg"
-    >
-      <UIcon
-        name="i-lucide-mic"
-        class="size-3.5 text-blue-300"
-      />
-      <span class="shrink-0 font-medium">Listening</span>
-      <span class="min-w-0 truncate font-mono text-blue-200/80">
-        {{ dictationPreview || 'Speak now…' }}
-      </span>
+    <div class="absolute bottom-10 left-1/2 z-30 -translate-x-1/2">
+      <button
+        class="group flex h-12 items-center justify-center gap-2 rounded-2xl border shadow-2xl ring-1 ring-black/40 backdrop-blur-md transition-all"
+        :class="dictating
+          ? (settings.speechProvider === 'groq'
+            ? 'w-60 border-blue-400/60 bg-[#303033]/95 px-3.5 text-blue-100'
+            : 'min-w-80 max-w-[min(34rem,calc(100vw-4rem))] border-blue-400/60 bg-[#303033]/95 px-3.5 text-blue-100')
+          : 'w-28 border-white/10 bg-[#303033]/90 text-dimmed opacity-90 hover:text-toned hover:bg-[#38383b]/95'"
+        title="Dictate text"
+        aria-label="Dictate text"
+        @click.stop="toggleDictation"
+      >
+        <UIcon
+          :name="transcribing ? 'i-lucide-loader-circle' : (dictating ? 'i-lucide-square' : 'i-lucide-mic')"
+          class="size-5 shrink-0"
+          :class="[
+            dictating ? 'text-blue-300' : 'group-hover:text-blue-300',
+            transcribing ? 'animate-spin' : ''
+          ]"
+        />
+        <span
+          v-if="!dictating"
+          class="text-[12px] font-medium"
+        >
+          Dictate
+        </span>
+        <div
+          v-if="dictating && settings.speechProvider === 'groq'"
+          class="flex h-7 w-44 shrink-0 items-center justify-center gap-1"
+          aria-hidden="true"
+        >
+          <span
+            v-for="(level, index) in groqSpectrum"
+            :key="index"
+            class="h-5 w-1 rounded-full bg-blue-300/85 transition-transform duration-75"
+            :class="transcribing ? 'animate-pulse' : ''"
+            :style="{ transform: `scaleY(${level})` }"
+          />
+        </div>
+        <span
+          v-if="dictating && settings.speechProvider === 'browser'"
+          class="shrink-0 text-[12px] font-medium text-blue-100"
+        >
+          Listening
+        </span>
+        <span
+          v-if="dictating && settings.speechProvider === 'browser'"
+          class="h-5 w-px shrink-0 bg-white/15"
+        />
+        <span
+          v-if="dictating && settings.speechProvider === 'browser'"
+          class="min-w-0 truncate text-[11px] font-mono text-blue-100/80"
+        >
+          {{ dictationPreview || 'Listening…' }}
+        </span>
+      </button>
     </div>
   </div>
 </template>

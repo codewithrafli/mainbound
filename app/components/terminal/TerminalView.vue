@@ -28,7 +28,6 @@ interface PaneHandle {
   findPrevious: (q: string) => void
   clearSearch: () => void
   focus: () => void
-  toggleDictation: () => void
 }
 
 const paneRefs = new Map<string, PaneHandle>()
@@ -74,10 +73,6 @@ function searchStep(backwards = false) {
   if (!q) return
   if (backwards) focusedPane()?.findPrevious(q)
   else focusedPane()?.findNext(q)
-}
-
-function togglePaneDictation(sessionId: string) {
-  paneRefs.get(sessionId)?.toggleDictation()
 }
 
 // right-click menu: split/close belong to the pane under the cursor
@@ -485,16 +480,6 @@ const dropOverlayStyle = computed(() => {
 
           <!-- pane actions (hover): split + close — splits belong to THIS pane -->
           <div class="absolute top-1 right-1.5 z-10 flex items-center gap-0.5 opacity-0 group-hover/pane:opacity-100 transition-opacity">
-            <button
-              class="flex items-center justify-center size-4 rounded bg-[#1a1a1a] text-dimmed hover:text-toned hover:bg-[#222222]"
-              title="Dictate text"
-              @click.stop="togglePaneDictation(pane.sessionId)"
-            >
-              <UIcon
-                name="i-lucide-mic"
-                class="size-3"
-              />
-            </button>
             <button
               class="flex items-center justify-center size-4 rounded bg-[#1a1a1a] text-dimmed hover:text-toned hover:bg-[#222222]"
               title="Split right (⌘D)"

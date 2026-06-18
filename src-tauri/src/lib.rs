@@ -4,6 +4,7 @@ mod notify;
 mod git;
 mod github;
 mod pty;
+mod speech;
 mod state;
 mod store;
 mod workspace;
@@ -194,6 +195,10 @@ pub fn run() {
       pty::pty_list,
       pty::pty_cwd,
       pty::save_clipboard_image,
+      speech::speech_groq_key_status,
+      speech::speech_groq_set_key,
+      speech::speech_groq_clear_key,
+      speech::speech_groq_transcribe,
       git::git_branch,
       git::git_repo_root,
       git::git_branches,

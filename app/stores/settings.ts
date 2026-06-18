@@ -13,6 +13,8 @@ export interface AppSettings {
   autoUpdateCheck: boolean
   /** auto-create draft PR when pushing a new branch */
   autoDraftPr: boolean
+  /** speech-to-text backend */
+  speechProvider: 'browser' | 'groq'
   /** BCP-47 speech recognition language; empty = browser default */
   speechLanguage: string
 }
@@ -24,7 +26,8 @@ const DEFAULTS: AppSettings = {
   notifMinBurst: 10,
   autoUpdateCheck: true,
   autoDraftPr: false,
-  speechLanguage: ''
+  speechProvider: 'groq',
+  speechLanguage: 'auto'
 }
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -38,6 +41,7 @@ export const useSettingsStore = defineStore('settings', () => {
     const saved = await invoke<Partial<AppSettings> | null>('settings_load').catch(() => null)
     if (saved && typeof saved === 'object') {
       Object.assign(settings, { ...DEFAULTS, ...saved })
+      if (!settings.speechLanguage) settings.speechLanguage = 'auto'
     }
   }
 
