@@ -108,6 +108,31 @@ const updater = useUpdaterStore()
 
         <USeparator />
 
+        <!-- speech -->
+        <div class="space-y-3">
+          <p class="section-label">
+            Speech
+          </p>
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <p class="text-[13px] text-toned">
+                Dictation language
+              </p>
+              <p class="text-[11px] text-dimmed">
+                Used by terminal speech-to-text · empty = system default
+              </p>
+            </div>
+            <UInput
+              v-model="settings.speechLanguage"
+              placeholder="en-US"
+              size="sm"
+              class="w-28 font-mono"
+            />
+          </div>
+        </div>
+
+        <USeparator />
+
         <!-- updates -->
         <div class="space-y-3">
           <p class="section-label">
@@ -128,7 +153,9 @@ const updater = useUpdaterStore()
           <!-- Auto draft PR -->
           <div class="flex items-center justify-between gap-4">
             <div>
-              <p class="text-[12.5px] text-toned font-medium">Auto Draft PR on Push</p>
+              <p class="text-[12.5px] text-toned font-medium">
+                Auto Draft PR on Push
+              </p>
               <p class="text-[11px] text-dimmed">
                 Automatically create a draft PR with AI description when pushing a new branch.
               </p>

@@ -13,6 +13,8 @@ export interface AppSettings {
   autoUpdateCheck: boolean
   /** auto-create draft PR when pushing a new branch */
   autoDraftPr: boolean
+  /** BCP-47 speech recognition language; empty = browser default */
+  speechLanguage: string
 }
 
 const DEFAULTS: AppSettings = {
@@ -21,7 +23,8 @@ const DEFAULTS: AppSettings = {
   aiProvider: 'claude',
   notifMinBurst: 10,
   autoUpdateCheck: true,
-  autoDraftPr: false
+  autoDraftPr: false,
+  speechLanguage: ''
 }
 
 export const useSettingsStore = defineStore('settings', () => {

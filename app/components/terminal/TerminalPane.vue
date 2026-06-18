@@ -17,14 +17,53 @@ const emit = defineEmits<{
   exited: [code: number]
 }>()
 
+interface SpeechRecognitionAlternativeLike {
+  transcript: string
+}
+
+interface SpeechRecognitionResultLike {
+  isFinal: boolean
+  0?: SpeechRecognitionAlternativeLike
+}
+
+interface SpeechRecognitionResultListLike {
+  length: number
+  [index: number]: SpeechRecognitionResultLike
+}
+
+interface SpeechRecognitionEventLike {
+  resultIndex: number
+  results: SpeechRecognitionResultListLike
+}
+
+interface SpeechRecognitionLike {
+  lang: string
+  interimResults: boolean
+  continuous: boolean
+  maxAlternatives: number
+  onstart: (() => void) | null
+  onend: (() => void) | null
+  onerror: ((event: { error?: string }) => void) | null
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null
+  start: () => void
+  stop: () => void
+  abort: () => void
+}
+
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike
+
 const notifications = useNotificationsStore()
+const toast = useToast()
 const { settings } = useSettingsStore()
 const { isLinux } = usePlatform()
 const el = ref<HTMLDivElement>()
+const dictating = ref(false)
+const dictationPreview = ref('')
 
 let term: Terminal | undefined
 let fit: FitAddon | undefined
 let search: SearchAddon | undefined
+let recognition: SpeechRecognitionLike | undefined
 let resizeObserver: ResizeObserver | undefined
 const unlisteners: UnlistenFn[] = []
 
@@ -204,7 +243,98 @@ async function onPaste(event: ClipboardEvent) {
   }
 }
 
+function speechRecognitionCtor(): SpeechRecognitionCtor | null {
+  const speechWindow = window as Window & {
+    SpeechRecognition?: SpeechRecognitionCtor
+    webkitSpeechRecognition?: SpeechRecognitionCtor
+  }
+  return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition ?? null
+}
+
+async function writePastedText(text: string) {
+  if (!text) return
+  const bracketed = term?.modes.bracketedPasteMode
+  const payload = bracketed ? `\x1b[200~${text}\x1b[201~` : text
+  await invoke('pty_write', { id: props.sessionId, data: payload })
+}
+
+function stopDictation() {
+  recognition?.stop()
+}
+
+function toggleDictation() {
+  if (dictating.value) {
+    stopDictation()
+    return
+  }
+
+  const Recognition = speechRecognitionCtor()
+  if (!Recognition) {
+    toast.add({
+      title: 'Speech-to-text unavailable',
+      description: 'This webview does not expose browser speech recognition.',
+      icon: 'i-lucide-mic-off',
+      color: 'warning'
+    })
+    return
+  }
+
+  recognition?.abort()
+  dictationPreview.value = ''
+  recognition = new Recognition()
+  recognition.lang = settings.speechLanguage.trim() || navigator.language || 'en-US'
+  recognition.interimResults = true
+  recognition.continuous = false
+  recognition.maxAlternatives = 1
+  recognition.onstart = () => {
+    dictating.value = true
+  }
+  recognition.onend = () => {
+    dictating.value = false
+    dictationPreview.value = ''
+    recognition = undefined
+  }
+  recognition.onerror = (event) => {
+    dictating.value = false
+    dictationPreview.value = ''
+    recognition = undefined
+    toast.add({
+      title: 'Dictation failed',
+      description: event.error || 'Speech recognition stopped unexpectedly.',
+      icon: 'i-lucide-mic-off',
+      color: 'error'
+    })
+  }
+  recognition.onresult = (event) => {
+    let finalText = ''
+    let interimText = ''
+    for (let index = event.resultIndex; index < event.results.length; index += 1) {
+      const result = event.results[index]
+      const transcript = result?.[0]?.transcript ?? ''
+      if (result?.isFinal) finalText += transcript
+      else interimText += transcript
+    }
+    dictationPreview.value = interimText.trim()
+    const text = finalText.trim()
+    if (text) writePastedText(text).catch(() => {})
+  }
+
+  try {
+    recognition.start()
+  } catch (error) {
+    recognition = undefined
+    dictating.value = false
+    toast.add({
+      title: 'Dictation failed',
+      description: String(error),
+      icon: 'i-lucide-mic-off',
+      color: 'error'
+    })
+  }
+}
+
 onBeforeUnmount(() => {
+  recognition?.abort()
   el.value?.removeEventListener('paste', onPaste, true)
   resizeObserver?.disconnect()
   unlisteners.forEach(off => off())
@@ -237,15 +367,28 @@ function clearSearch() {
   search?.clearDecorations()
 }
 
-defineExpose({ focus, findNext, findPrevious, clearSearch })
+defineExpose({ focus, findNext, findPrevious, clearSearch, toggleDictation, dictating })
 </script>
 
 <template>
   <!-- padding on the wrapper so FitAddon measures the host correctly -->
-  <div class="h-full w-full bg-[#0e0e10] px-3 py-2">
+  <div class="relative h-full w-full bg-[#0e0e10] px-3 py-2">
     <div
       ref="el"
       class="h-full w-full"
     />
+    <div
+      v-if="dictating"
+      class="pointer-events-none absolute bottom-2 left-3 right-3 z-20 flex items-center gap-2 rounded-md border border-blue-500/40 bg-[#101828]/95 px-2.5 py-1.5 text-[11px] text-blue-100 shadow-lg"
+    >
+      <UIcon
+        name="i-lucide-mic"
+        class="size-3.5 text-blue-300"
+      />
+      <span class="shrink-0 font-medium">Listening</span>
+      <span class="min-w-0 truncate font-mono text-blue-200/80">
+        {{ dictationPreview || 'Speak now…' }}
+      </span>
+    </div>
   </div>
 </template>
