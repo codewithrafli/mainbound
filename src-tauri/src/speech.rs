@@ -1,4 +1,4 @@
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 
 use serde::{Deserialize, Serialize};
 
@@ -23,10 +23,27 @@ fn groq_entry() -> AppResult<keyring::Entry> {
         .map_err(|e| AppError::Pty(format!("keychain: {e}")))
 }
 
+fn groq_key_cache() -> &'static Mutex<Option<String>> {
+    static CACHE: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(None))
+}
+
 fn groq_key() -> AppResult<String> {
-    groq_entry()?
+    if let Some(key) = groq_key_cache()
+        .lock()
+        .map_err(|e| AppError::Pty(format!("groq key cache: {e}")))?
+        .clone()
+    {
+        return Ok(key);
+    }
+
+    let key = groq_entry()?
         .get_password()
-        .map_err(|_| AppError::Pty("Groq API key is not configured".into()))
+        .map_err(|_| AppError::Pty("Groq API key is not configured".into()))?;
+    *groq_key_cache()
+        .lock()
+        .map_err(|e| AppError::Pty(format!("groq key cache: {e}")))? = Some(key.clone());
+    Ok(key)
 }
 
 #[derive(Serialize)]
@@ -42,7 +59,10 @@ struct GroqTranscription {
 #[tauri::command]
 pub fn speech_groq_key_status() -> SpeechKeyStatus {
     SpeechKeyStatus {
-        configured: groq_key().is_ok(),
+        configured: groq_key_cache()
+            .lock()
+            .map(|key| key.is_some())
+            .unwrap_or(false),
     }
 }
 
@@ -54,13 +74,20 @@ pub fn speech_groq_set_key(key: String) -> AppResult<()> {
     }
     groq_entry()?
         .set_password(key)
-        .map_err(|e| AppError::Pty(format!("keychain: {e}")))
+        .map_err(|e| AppError::Pty(format!("keychain: {e}")))?;
+    *groq_key_cache()
+        .lock()
+        .map_err(|e| AppError::Pty(format!("groq key cache: {e}")))? = Some(key.to_string());
+    Ok(())
 }
 
 #[tauri::command]
 pub fn speech_groq_clear_key() -> AppResult<()> {
     let entry = groq_entry()?;
     let _ = entry.delete_credential();
+    if let Ok(mut key) = groq_key_cache().lock() {
+        *key = None;
+    }
     Ok(())
 }
 

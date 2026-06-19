@@ -15,8 +15,10 @@ export interface AppSettings {
   autoDraftPr: boolean
   /** speech-to-text backend */
   speechProvider: 'browser' | 'groq'
-  /** BCP-47 speech recognition language; empty = browser default */
+  /** speech recognition/transcription language hint */
   speechLanguage: string
+  /** non-secret local flag; avoids probing macOS Keychain for UI status */
+  speechGroqKeyConfigured: boolean
 }
 
 const DEFAULTS: AppSettings = {
@@ -27,7 +29,19 @@ const DEFAULTS: AppSettings = {
   autoUpdateCheck: true,
   autoDraftPr: false,
   speechProvider: 'groq',
-  speechLanguage: 'auto'
+  speechLanguage: 'auto',
+  speechGroqKeyConfigured: false
+}
+
+function normalizeSpeechLanguage(value: string | undefined) {
+  const language = value?.trim().toLowerCase().replace('_', '-') || 'auto'
+  if (language === 'auto') return 'auto'
+  if (language.startsWith('id')) return 'id'
+  if (language.startsWith('en')) return 'en'
+  if (language.startsWith('ja')) return 'ja'
+  if (language.startsWith('ko')) return 'ko'
+  if (language.startsWith('zh')) return 'zh'
+  return 'auto'
 }
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -41,7 +55,7 @@ export const useSettingsStore = defineStore('settings', () => {
     const saved = await invoke<Partial<AppSettings> | null>('settings_load').catch(() => null)
     if (saved && typeof saved === 'object') {
       Object.assign(settings, { ...DEFAULTS, ...saved })
-      if (!settings.speechLanguage) settings.speechLanguage = 'auto'
+      settings.speechLanguage = normalizeSpeechLanguage(settings.speechLanguage)
     }
   }
 

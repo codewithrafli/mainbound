@@ -55,16 +55,35 @@ const SILENCE_COMMIT_MS = 2_800
 const GROQ_VOICE_THRESHOLD = 0.045
 const GROQ_MIN_AUTO_SPEECH_MS = 450
 const GROQ_SPECTRUM_BARS = 18
+const DICTATION_DOCK_STORAGE_KEY = 'mainbound.dictationDockPosition'
+const DICTATION_DOCK_MARGIN = 14
+const TERMINAL_THEME = {
+  background: '#0e0e10',
+  foreground: '#cccccc',
+  selectionBackground: '#264f78',
+  black: '#1a1a1a',
+  brightBlack: '#555555'
+}
 
 const notifications = useNotificationsStore()
 const toast = useToast()
 const { settings } = useSettingsStore()
 const { isLinux } = usePlatform()
+const host = ref<HTMLDivElement>()
 const el = ref<HTMLDivElement>()
 const dictating = ref(false)
 const dictationPreview = ref('')
 const transcribing = ref(false)
 const groqSpectrum = ref(Array.from({ length: GROQ_SPECTRUM_BARS }, () => 0.18))
+const dictationDock = reactive({
+  ready: false,
+  dragging: false,
+  moved: false,
+  x: 0,
+  y: 0,
+  startX: 0,
+  startY: 0
+})
 
 let term: Terminal | undefined
 let fit: FitAddon | undefined
@@ -79,6 +98,7 @@ let mediaRecorder: MediaRecorder | undefined
 let mediaStream: MediaStream | undefined
 let audioContext: AudioContext | undefined
 let analyser: AnalyserNode | undefined
+let frequencyData: Uint8Array | undefined
 let silenceFrame = 0
 let speechStartedAt: number | null = null
 let lastSpeechAt: number | null = null
@@ -87,12 +107,45 @@ let recordedChunks: Blob[] = []
 let resizeObserver: ResizeObserver | undefined
 const unlisteners: UnlistenFn[] = []
 
+const dictationDockStyle = computed(() => ({
+  left: `${dictationDock.x}px`,
+  top: `${dictationDock.y}px`,
+  opacity: dictationDock.ready ? '1' : '0',
+  transform: 'translate(-50%, -50%)'
+}))
+
+const dictationDockButtonClass = computed(() => [
+  dictating.value
+    ? (settings.speechProvider === 'groq'
+        ? 'w-60 border-blue-400/60 bg-[#303033]/95 px-3.5 text-blue-100'
+        : 'min-w-80 max-w-[min(34rem,calc(100vw-4rem))] border-blue-400/60 bg-[#303033]/95 px-3.5 text-blue-100')
+    : 'w-28 border-white/10 bg-[#303033]/90 text-dimmed opacity-90 hover:text-toned hover:bg-[#38383b]/95',
+  dictationDock.dragging ? 'cursor-grabbing' : 'cursor-grab'
+])
+
 // live font-size from settings
 watch(() => settings.fontSize, (size) => {
   if (!term) return
   term.options.fontSize = size
   fit?.fit()
 })
+
+watch([dictating, () => settings.speechProvider], () => {
+  nextTick(clampDictationDock)
+})
+
+watch([dictating, transcribing], () => {
+  applyTerminalCursorState()
+})
+
+function applyTerminalCursorState() {
+  if (!term) return
+  term.options.theme = {
+    ...TERMINAL_THEME,
+    cursor: transcribing.value ? '#f59e0b' : (dictating.value ? '#60a5fa' : '#cccccc'),
+    cursorAccent: '#0e0e10'
+  }
+}
 
 onMounted(async () => {
   // Cross-platform monospace stack: Consolas ships with Windows,
@@ -109,12 +162,9 @@ onMounted(async () => {
     // Disable GPU compositing on Windows to avoid WebView2 flickering
     fastScrollModifier: 'alt',
     theme: {
-      background: '#0e0e10',
-      foreground: '#cccccc',
+      ...TERMINAL_THEME,
       cursor: '#cccccc',
-      selectionBackground: '#264f78',
-      black: '#1a1a1a',
-      brightBlack: '#555555'
+      cursorAccent: '#0e0e10'
     }
   })
   fit = new FitAddon()
@@ -216,8 +266,10 @@ onMounted(async () => {
   // visible again after a v-show toggle
   resizeObserver = new ResizeObserver(() => {
     if (el.value && el.value.offsetWidth > 0) fit?.fit()
+    clampDictationDock()
   })
   resizeObserver.observe(el.value!)
+  requestAnimationFrame(initializeDictationDock)
 
   // Image paste: terminal CLIs that accept image attachments (Codex,
   // Claude Code) detect an image file path in pasted input. When the
@@ -261,6 +313,98 @@ async function onPaste(event: ClipboardEvent) {
   } catch (err) {
     term?.writeln(`\r\n\x1b[31mimage paste failed: ${err}\x1b[0m`)
   }
+}
+
+function defaultDockPosition() {
+  const rect = host.value?.getBoundingClientRect()
+  return {
+    x: rect ? rect.width / 2 : 0,
+    y: rect ? Math.max(DICTATION_DOCK_MARGIN, rect.height - 56) : 0
+  }
+}
+
+function clampDockPosition(x: number, y: number) {
+  const rect = host.value?.getBoundingClientRect()
+  if (!rect) return { x, y }
+  const halfWidth = dictating.value && settings.speechProvider !== 'groq' ? 170 : 130
+  const halfHeight = 30
+  return {
+    x: Math.min(Math.max(x, DICTATION_DOCK_MARGIN + halfWidth), Math.max(DICTATION_DOCK_MARGIN + halfWidth, rect.width - DICTATION_DOCK_MARGIN - halfWidth)),
+    y: Math.min(Math.max(y, DICTATION_DOCK_MARGIN + halfHeight), Math.max(DICTATION_DOCK_MARGIN + halfHeight, rect.height - DICTATION_DOCK_MARGIN - halfHeight))
+  }
+}
+
+function saveDictationDock() {
+  if (!import.meta.client) return
+  localStorage.setItem(DICTATION_DOCK_STORAGE_KEY, JSON.stringify({
+    x: dictationDock.x,
+    y: dictationDock.y
+  }))
+}
+
+function initializeDictationDock() {
+  const fallback = defaultDockPosition()
+  let position = fallback
+  if (import.meta.client) {
+    try {
+      const saved = JSON.parse(localStorage.getItem(DICTATION_DOCK_STORAGE_KEY) || 'null') as { x?: number, y?: number } | null
+      if (typeof saved?.x === 'number' && typeof saved.y === 'number') {
+        position = { x: saved.x, y: saved.y }
+      }
+    } catch {
+      position = fallback
+    }
+  }
+  const clamped = clampDockPosition(position.x, position.y)
+  dictationDock.x = clamped.x
+  dictationDock.y = clamped.y
+  dictationDock.ready = true
+}
+
+function clampDictationDock() {
+  if (!dictationDock.ready) return
+  const clamped = clampDockPosition(dictationDock.x, dictationDock.y)
+  dictationDock.x = clamped.x
+  dictationDock.y = clamped.y
+}
+
+function onDictationDockPointerMove(event: PointerEvent) {
+  if (!dictationDock.dragging || !host.value) return
+  const rect = host.value.getBoundingClientRect()
+  const next = clampDockPosition(event.clientX - rect.left, event.clientY - rect.top)
+  if (Math.hypot(next.x - dictationDock.startX, next.y - dictationDock.startY) > 4) {
+    dictationDock.moved = true
+  }
+  dictationDock.x = next.x
+  dictationDock.y = next.y
+}
+
+function stopDictationDockDrag() {
+  if (!dictationDock.dragging) return
+  dictationDock.dragging = false
+  saveDictationDock()
+  window.removeEventListener('pointermove', onDictationDockPointerMove)
+  window.removeEventListener('pointerup', stopDictationDockDrag)
+}
+
+function startDictationDockDrag(event: PointerEvent) {
+  if (event.button !== 0 || !host.value) return
+  const rect = host.value.getBoundingClientRect()
+  dictationDock.dragging = true
+  dictationDock.moved = false
+  dictationDock.startX = event.clientX - rect.left
+  dictationDock.startY = event.clientY - rect.top
+  window.addEventListener('pointermove', onDictationDockPointerMove)
+  window.addEventListener('pointerup', stopDictationDockDrag)
+}
+
+function onDictationDockClick(event: MouseEvent) {
+  if (dictationDock.moved) {
+    event.preventDefault()
+    dictationDock.moved = false
+    return
+  }
+  toggleDictation()
 }
 
 function speechRecognitionCtor(): SpeechRecognitionCtor | null {
@@ -350,8 +494,14 @@ function stopDictation() {
 }
 
 function groqLanguageHint() {
-  const lang = settings.speechLanguage.trim()
-  return lang === 'auto' ? null : lang || null
+  const lang = settings.speechLanguage.trim().toLowerCase().replace('_', '-')
+  if (!lang || lang === 'auto') return null
+  if (lang.startsWith('id')) return 'id'
+  if (lang.startsWith('en')) return 'en'
+  if (lang.startsWith('ja')) return 'ja'
+  if (lang.startsWith('ko')) return 'ko'
+  if (lang.startsWith('zh')) return 'zh'
+  return null
 }
 
 function cleanupGroqRecording() {
@@ -362,6 +512,7 @@ function cleanupGroqRecording() {
   audioContext?.close().catch(() => {})
   audioContext = undefined
   analyser = undefined
+  frequencyData = undefined
   speechStartedAt = null
   lastSpeechAt = null
   groqSpectrum.value = Array.from({ length: GROQ_SPECTRUM_BARS }, () => 0.18)
@@ -420,7 +571,8 @@ function updateGroqSpectrum(data: Uint8Array) {
       sum += centered * centered
     }
     const rms = Math.sqrt(sum / Math.max(1, end - start))
-    return Math.max(0.16, Math.min(1, rms / 36))
+    const idle = 0.18 + Math.sin(Date.now() / 180 + bar * 0.7) * 0.045
+    return Math.max(idle, Math.min(1, rms / 82))
   })
   groqSpectrum.value = levels
 }
@@ -429,7 +581,9 @@ function watchGroqSilence() {
   if (!analyser || !dictating.value) return
   const data = new Uint8Array(analyser.fftSize)
   analyser.getByteTimeDomainData(data)
-  updateGroqSpectrum(data)
+  frequencyData ??= new Uint8Array(analyser.frequencyBinCount)
+  analyser.getByteFrequencyData(frequencyData)
+  updateGroqSpectrum(frequencyData)
   let sum = 0
   for (const value of data) {
     const centered = value - 128
@@ -472,21 +626,13 @@ async function startGroqRecording() {
   }
 
   try {
-    const keyStatus = await invoke<{ configured: boolean }>('speech_groq_key_status').catch(() => null)
-    if (!keyStatus?.configured) {
-      toast.add({
-        title: 'Groq key required',
-        description: 'Open Settings and add your Groq API key first.',
-        icon: 'i-lucide-key-round',
-        color: 'warning'
-      })
-      return
-    }
     recordedChunks = []
     mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true })
     audioContext = new AudioContext()
     analyser = audioContext.createAnalyser()
-    analyser.fftSize = 1024
+    analyser.fftSize = 2048
+    analyser.smoothingTimeConstant = 0.72
+    frequencyData = new Uint8Array(analyser.frequencyBinCount)
     audioContext.createMediaStreamSource(mediaStream).connect(analyser)
     const mime = preferredRecordingMime()
     mediaRecorder = mime
@@ -497,7 +643,7 @@ async function startGroqRecording() {
     }
     mediaRecorder.onstop = () => {
       const speechMs = speechStartedAt && lastSpeechAt ? lastSpeechAt - speechStartedAt : 0
-      const shouldTranscribe = Boolean(speechStartedAt && (manualGroqStop || speechMs >= GROQ_MIN_AUTO_SPEECH_MS))
+      const shouldTranscribe = manualGroqStop || Boolean(speechStartedAt && speechMs >= GROQ_MIN_AUTO_SPEECH_MS)
       const blob = new Blob(recordedChunks, { type: mediaRecorder?.mimeType || mime })
       cleanupGroqRecording()
       if (shouldTranscribe) {
@@ -657,6 +803,8 @@ onBeforeUnmount(() => {
   stoppingDictation = true
   clearSilenceTimer()
   cleanupGroqRecording()
+  window.removeEventListener('pointermove', onDictationDockPointerMove)
+  window.removeEventListener('pointerup', stopDictationDockDrag)
   recognition?.abort()
   el.value?.removeEventListener('paste', onPaste, true)
   resizeObserver?.disconnect()
@@ -695,22 +843,25 @@ defineExpose({ focus, findNext, findPrevious, clearSearch })
 
 <template>
   <!-- padding on the wrapper so FitAddon measures the host correctly -->
-  <div class="relative h-full w-full bg-[#0e0e10] px-3 py-2">
+  <div
+    ref="host"
+    class="relative h-full w-full bg-[#0e0e10] px-3 py-2"
+  >
     <div
       ref="el"
       class="h-full w-full"
     />
-    <div class="absolute bottom-10 left-1/2 z-30 -translate-x-1/2">
+    <div
+      class="absolute z-30"
+      :style="dictationDockStyle"
+    >
       <button
-        class="group flex h-12 items-center justify-center gap-2 rounded-2xl border shadow-2xl ring-1 ring-black/40 backdrop-blur-md transition-all"
-        :class="dictating
-          ? (settings.speechProvider === 'groq'
-            ? 'w-60 border-blue-400/60 bg-[#303033]/95 px-3.5 text-blue-100'
-            : 'min-w-80 max-w-[min(34rem,calc(100vw-4rem))] border-blue-400/60 bg-[#303033]/95 px-3.5 text-blue-100')
-          : 'w-28 border-white/10 bg-[#303033]/90 text-dimmed opacity-90 hover:text-toned hover:bg-[#38383b]/95'"
+        class="group flex h-12 touch-none select-none items-center justify-center gap-2 rounded-2xl border shadow-2xl ring-1 ring-black/40 backdrop-blur-md transition-all"
+        :class="dictationDockButtonClass"
         title="Dictate text"
         aria-label="Dictate text"
-        @click.stop="toggleDictation"
+        @pointerdown.stop="startDictationDockDrag"
+        @click.stop="onDictationDockClick"
       >
         <UIcon
           :name="transcribing ? 'i-lucide-loader-circle' : (dictating ? 'i-lucide-square' : 'i-lucide-mic')"

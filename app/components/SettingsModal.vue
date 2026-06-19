@@ -20,21 +20,16 @@ const speechProviders = [
 ]
 
 const groqKey = ref('')
-const groqKeyConfigured = ref(false)
 const savingGroqKey = ref(false)
-
-async function refreshGroqStatus() {
-  const status = await invoke<{ configured: boolean }>('speech_groq_key_status').catch(() => null)
-  groqKeyConfigured.value = !!status?.configured
-}
+const groqKeyConfigured = computed(() => settings.value.speechGroqKeyConfigured)
 
 async function saveGroqKey() {
   if (!groqKey.value.trim()) return
   savingGroqKey.value = true
   try {
     await invoke('speech_groq_set_key', { key: groqKey.value })
+    settings.value.speechGroqKeyConfigured = true
     groqKey.value = ''
-    await refreshGroqStatus()
     toast.add({ title: 'Groq key saved', icon: 'i-lucide-key-round' })
   } catch (error) {
     toast.add({ title: 'Failed to save Groq key', description: String(error), color: 'error' })
@@ -45,12 +40,8 @@ async function saveGroqKey() {
 
 async function clearGroqKey() {
   await invoke('speech_groq_clear_key').catch(() => {})
-  await refreshGroqStatus()
+  settings.value.speechGroqKeyConfigured = false
 }
-
-watch(modalOpen, (open) => {
-  if (open) refreshGroqStatus()
-})
 </script>
 
 <template>
