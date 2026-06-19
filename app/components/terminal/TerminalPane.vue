@@ -15,6 +15,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   exited: [code: number]
+  dictationState: [state: { dictating: boolean, transcribing: boolean }]
 }>()
 
 interface SpeechRecognitionAlternativeLike {
@@ -136,6 +137,10 @@ watch([dictating, () => settings.speechProvider], () => {
 
 watch([dictating, transcribing], () => {
   applyTerminalCursorState()
+  emit('dictationState', {
+    dictating: dictating.value,
+    transcribing: transcribing.value
+  })
 })
 
 function applyTerminalCursorState() {
@@ -838,7 +843,7 @@ function clearSearch() {
   search?.clearDecorations()
 }
 
-defineExpose({ focus, findNext, findPrevious, clearSearch })
+defineExpose({ focus, findNext, findPrevious, clearSearch, toggleDictation })
 </script>
 
 <template>
@@ -852,6 +857,7 @@ defineExpose({ focus, findNext, findPrevious, clearSearch })
       class="h-full w-full"
     />
     <div
+      v-if="dictating || transcribing"
       class="absolute z-30"
       :style="dictationDockStyle"
     >

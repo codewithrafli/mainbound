@@ -28,15 +28,20 @@ interface PaneHandle {
   findPrevious: (q: string) => void
   clearSearch: () => void
   focus: () => void
+  toggleDictation: () => void
 }
 
 const paneRefs = new Map<string, PaneHandle>()
+const paneDictation = reactive<Record<string, { dictating: boolean, transcribing: boolean }>>({})
 const searchInput = ref()
 const searchQuery = ref('')
 
 function setPaneRef(sessionId: string, handle: unknown) {
   if (handle) paneRefs.set(sessionId, handle as PaneHandle)
-  else paneRefs.delete(sessionId)
+  else {
+    paneRefs.delete(sessionId)
+    paneDictation[sessionId] = { dictating: false, transcribing: false }
+  }
 }
 
 function focusedPane(): PaneHandle | undefined {
@@ -239,6 +244,18 @@ function paneRing(pane: PaneBox) {
   return terminals.focusedSessionId === pane.sessionId
     ? 'ring-1 ring-blue-500/50'
     : 'ring-1 ring-[#222222]'
+}
+
+function paneDictationState(sessionId: string) {
+  return paneDictation[sessionId] ?? { dictating: false, transcribing: false }
+}
+
+function setPaneDictationState(sessionId: string, state: { dictating: boolean, transcribing: boolean }) {
+  paneDictation[sessionId] = state
+}
+
+function togglePaneDictation(sessionId: string) {
+  paneRefs.get(sessionId)?.toggleDictation()
 }
 
 // --- divider drag-resize -------------------------------------------------
@@ -457,6 +474,7 @@ const dropOverlayStyle = computed(() => {
                 :session-id="pane.sessionId"
                 :cwd="terminals.sessions[pane.sessionId]?.cwd ?? null"
                 @exited="terminals.closePane(pane.sessionId)"
+                @dictation-state="setPaneDictationState(pane.sessionId, $event)"
               />
             </div>
           </UContextMenu>
@@ -479,7 +497,28 @@ const dropOverlayStyle = computed(() => {
           </div>
 
           <!-- pane actions (hover): split + close — splits belong to THIS pane -->
-          <div class="absolute top-1 right-1.5 z-10 flex items-center gap-0.5 opacity-0 group-hover/pane:opacity-100 transition-opacity">
+          <div
+            class="absolute top-1 right-1.5 z-10 flex items-center gap-0.5 transition-opacity"
+            :class="paneDictationState(pane.sessionId).dictating || paneDictationState(pane.sessionId).transcribing
+              ? 'opacity-100'
+              : 'opacity-0 group-hover/pane:opacity-100'"
+          >
+            <button
+              class="flex items-center justify-center size-4 rounded bg-[#1a1a1a] text-dimmed hover:text-blue-300 hover:bg-[#222222]"
+              :class="paneDictationState(pane.sessionId).dictating || paneDictationState(pane.sessionId).transcribing
+                ? 'text-blue-300 bg-[#222222]'
+                : ''"
+              title="Dictate"
+              @click.stop="togglePaneDictation(pane.sessionId)"
+            >
+              <UIcon
+                :name="paneDictationState(pane.sessionId).transcribing
+                  ? 'i-lucide-loader-circle'
+                  : (paneDictationState(pane.sessionId).dictating ? 'i-lucide-square' : 'i-lucide-mic')"
+                class="size-3"
+                :class="paneDictationState(pane.sessionId).transcribing ? 'animate-spin' : ''"
+              />
+            </button>
             <button
               class="flex items-center justify-center size-4 rounded bg-[#1a1a1a] text-dimmed hover:text-toned hover:bg-[#222222]"
               title="Split right (⌘D)"
