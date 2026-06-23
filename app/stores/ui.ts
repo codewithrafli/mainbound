@@ -7,10 +7,19 @@ export const useUiStore = defineStore('ui', () => {
   const onboardingSkipped = ref(false)
 
   // collapsible side panels (persisted to localStorage)
-  const leftSidebarOpen = ref(true)
+  const terminalSidebarOpen = ref(true)
+  const changesSidebarOpen = ref(true)
   const rightPanelOpen = ref(true)
   // webview zoom (driven from JS on Windows/Linux; macOS uses native menu)
   const zoom = ref(1)
+
+  const leftSidebarOpen = computed({
+    get: () => view.value === 'changes' ? changesSidebarOpen.value : terminalSidebarOpen.value,
+    set: (open: boolean) => {
+      if (view.value === 'changes') changesSidebarOpen.value = open
+      else terminalSidebarOpen.value = open
+    }
+  })
 
   function toggleLeftSidebar() {
     leftSidebarOpen.value = !leftSidebarOpen.value
@@ -23,19 +32,32 @@ export const useUiStore = defineStore('ui', () => {
     const saved = localStorage.getItem('mb-panels')
     if (saved) {
       try {
-        const { left, right, zoom: z } = JSON.parse(saved)
-        leftSidebarOpen.value = left ?? true
+        const {
+          left,
+          terminalLeft,
+          changesLeft,
+          right,
+          zoom: z
+        } = JSON.parse(saved)
+        terminalSidebarOpen.value = terminalLeft ?? left ?? true
+        changesSidebarOpen.value = changesLeft ?? left ?? true
         rightPanelOpen.value = right ?? true
         if (typeof z === 'number') zoom.value = z
       } catch { /* ignore */ }
     }
-    watch([leftSidebarOpen, rightPanelOpen, zoom], ([left, right, z]) => {
-      localStorage.setItem('mb-panels', JSON.stringify({ left, right, zoom: z }))
+    watch([terminalSidebarOpen, changesSidebarOpen, rightPanelOpen, zoom], ([terminalLeft, changesLeft, right, z]) => {
+      localStorage.setItem('mb-panels', JSON.stringify({
+        terminalLeft,
+        changesLeft,
+        right,
+        zoom: z
+      }))
     })
   }
 
   return {
     view, paletteOpen, terminalSearchOpen, onboardingSkipped,
-    leftSidebarOpen, rightPanelOpen, zoom, toggleLeftSidebar, toggleRightPanel
+    leftSidebarOpen, terminalSidebarOpen, changesSidebarOpen,
+    rightPanelOpen, zoom, toggleLeftSidebar, toggleRightPanel
   }
 })

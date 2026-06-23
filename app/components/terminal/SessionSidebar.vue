@@ -19,6 +19,11 @@ function paneCount(tab: (typeof terminals.tabs)[number]) {
   return leavesOf(tab.root).length
 }
 
+function paneCountLabel(tab: (typeof terminals.tabs)[number]) {
+  const count = paneCount(tab)
+  return count === 1 ? '1 pane' : `${count} panes`
+}
+
 function onDragStart(tabId: string, event: DragEvent) {
   terminals.draggingTabId = tabId
   if (event.dataTransfer) {
@@ -34,47 +39,104 @@ function onDragStart(tabId: string, event: DragEvent) {
     <!-- SESSIONS -->
     <div class="flex items-center px-3 pt-3 pb-1.5">
       <span class="section-label">Sessions</span>
-      <span v-if="workspaces.active" class="ml-1.5 text-[10px] text-dimmed truncate max-w-24">· {{
+      <span
+        v-if="workspaces.active"
+        class="ml-1.5 text-[10px] text-dimmed truncate max-w-24"
+      >· {{
         workspaces.active.name }}</span>
       <span class="ml-auto flex items-center">
-        <UDropdownMenu v-if="repoItems.length" :items="repoItems" :content="{ align: 'end' }" :ui="{ content: 'w-64' }">
-          <UButton icon="i-lucide-plus" color="neutral" variant="ghost" size="xs"
-            aria-label="New session in repository" />
+        <UDropdownMenu
+          v-if="repoItems.length"
+          :items="repoItems"
+          :content="{ align: 'end' }"
+          :ui="{ content: 'w-64' }"
+        >
+          <UButton
+            icon="i-lucide-plus"
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            aria-label="New session in repository"
+          />
         </UDropdownMenu>
       </span>
     </div>
 
     <nav class="flex-1 overflow-y-auto px-2 space-y-1 py-2">
-      <div v-for="tab in terminals.visibleTabs" :key="tab.id" role="button" tabindex="0" draggable="true"
+      <div
+        v-for="tab in terminals.visibleTabs"
+        :key="tab.id"
+        role="button"
+        tabindex="0"
+        draggable="true"
         class="group flex items-start w-full gap-2 px-2 py-1.5 rounded-lg text-left text-[13px] cursor-pointer transition-colors"
         :class="[
           tab.id === terminals.activeTabId
             ? 'bg-elevated text-highlighted ring-1 ring-(--ui-border-accented)'
             : 'text-muted hover:bg-elevated/50 hover:text-toned',
           tab.id === terminals.draggingTabId ? 'opacity-50' : ''
-        ]" @click="terminals.setActiveTab(tab.id)" @keydown.enter="terminals.setActiveTab(tab.id)"
-        @dragstart="onDragStart(tab.id, $event)" @dragend="terminals.draggingTabId = null">
+        ]"
+        @click="terminals.setActiveTab(tab.id)"
+        @keydown.enter="terminals.setActiveTab(tab.id)"
+        @dragstart="onDragStart(tab.id, $event)"
+        @dragend="terminals.draggingTabId = null"
+      >
         <span class="relative shrink-0 mt-0.5">
           <!-- unread notification dot -->
-          <span v-if="notifications.unreadByTab[tab.id]"
-            class="absolute -top-1 -right-1 size-2 rounded-full bg-amber-400 ring-2 ring-(--ui-bg-muted)" />
+          <span
+            v-if="notifications.unreadByTab[tab.id]"
+            class="absolute -top-1 -right-1 size-2 rounded-full bg-amber-400 ring-2 ring-(--ui-bg-muted)"
+          />
         </span>
-        <span class="flex-1 min-w-0">
-          <span class="block truncate leading-tight">
+        <span class="flex min-w-0 flex-1 flex-col gap-1">
+          <span class="block truncate text-[13px] leading-tight">
             {{ tab.title }}
-            <span v-if="paneCount(tab) > 1" class="text-[10px] text-dimmed">· {{ paneCount(tab) }}</span>
           </span>
-          <span v-if="tab.branch" class="flex items-center gap-1 text-[10.5px] font-mono text-dimmed leading-tight">
-            <UIcon name="i-lucide-git-branch" class="size-2.5" />
-            <span class="truncate">{{ tab.branch }}</span>
+          <span
+            v-if="tab.branch || paneCount(tab) > 1"
+            class="flex min-w-0 items-center gap-1.5 text-[10.5px] leading-tight text-dimmed"
+          >
+            <span
+              v-if="tab.branch"
+              class="flex min-w-0 items-center gap-1 font-mono"
+            >
+              <UIcon
+                name="i-lucide-git-branch"
+                class="size-2.5 shrink-0"
+              />
+              <span class="truncate">{{ tab.branch }}</span>
+            </span>
+            <span
+              v-if="tab.branch && paneCount(tab) > 1"
+              class="size-1 rounded-full bg-current opacity-35"
+            />
+            <span
+              v-if="paneCount(tab) > 1"
+              class="inline-flex shrink-0 items-center gap-1 rounded-md bg-default/60 px-1.5 py-0.5 text-[10px] text-muted"
+            >
+              <UIcon
+                name="i-lucide-panels-top-left"
+                class="size-2.5"
+              />
+              {{ paneCountLabel(tab) }}
+            </span>
           </span>
         </span>
-        <UButton icon="i-lucide-x" color="neutral" variant="ghost" size="xs"
-          class="opacity-0 group-hover:opacity-100 -mr-1" aria-label="Close session"
-          @click.stop="terminals.killTab(tab.id)" />
+        <UButton
+          icon="i-lucide-x"
+          color="neutral"
+          variant="ghost"
+          size="xs"
+          class="opacity-0 group-hover:opacity-100 -mr-1"
+          aria-label="Close session"
+          @click.stop="terminals.killTab(tab.id)"
+        />
       </div>
 
-      <p v-if="!terminals.visibleTabs.length" class="px-2 py-4 text-xs text-dimmed italic">
+      <p
+        v-if="!terminals.visibleTabs.length"
+        class="px-2 py-4 text-xs text-dimmed italic"
+      >
         No sessions yet.
       </p>
     </nav>
@@ -88,11 +150,21 @@ function onDragStart(tabId: string, event: DragEvent) {
         <p class="text-[13px] font-medium text-highlighted truncate">
           {{ workspaces.active?.name ?? 'None selected' }}
         </p>
-        <p v-if="workspaces.repos.length" class="text-[10.5px] font-mono text-muted">
+        <p
+          v-if="workspaces.repos.length"
+          class="text-[10.5px] font-mono text-muted"
+        >
           {{ workspaces.repos.length }} repositories
         </p>
-        <UButton label="Add Workspace" icon="i-lucide-folder-plus" color="neutral" variant="outline" size="xs" block
-          @click="workspaces.add()" />
+        <UButton
+          label="Add Workspace"
+          icon="i-lucide-folder-plus"
+          color="neutral"
+          variant="outline"
+          size="xs"
+          block
+          @click="workspaces.add()"
+        />
       </div>
     </div>
   </aside>
