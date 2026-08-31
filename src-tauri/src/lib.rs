@@ -1,5 +1,6 @@
 mod ai;
 mod error;
+mod explorer;
 mod notify;
 mod git;
 mod github;
@@ -89,6 +90,11 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
     .item(
       &MenuItemBuilder::with_id("view-changes", "File Changes")
         .accelerator("CmdOrCtrl+2")
+        .build(app)?,
+    )
+    .item(
+      &MenuItemBuilder::with_id("view-explorer", "Explorer")
+        .accelerator("CmdOrCtrl+3")
         .build(app)?,
     )
     .separator()
@@ -199,6 +205,8 @@ pub fn run() {
       speech::speech_groq_set_key,
       speech::speech_groq_clear_key,
       speech::speech_groq_transcribe,
+      explorer::explorer_list_dir,
+      explorer::explorer_read_file,
       git::git_branch,
       git::git_repo_root,
       git::git_branches,

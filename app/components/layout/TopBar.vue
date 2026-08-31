@@ -6,7 +6,8 @@ const { cmdKey, isWindows } = usePlatform()
 
 const views = computed(() => [
   { id: 'terminal' as const, label: 'Terminal', kbd: `${cmdKey.value}1` },
-  { id: 'changes' as const, label: 'File Changes', kbd: `${cmdKey.value}2` }
+  { id: 'changes' as const, label: 'File Changes', kbd: `${cmdKey.value}2` },
+  { id: 'explorer' as const, label: 'Explorer', kbd: `${cmdKey.value}3` }
 ])
 
 function newSession() {

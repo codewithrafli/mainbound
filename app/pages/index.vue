@@ -39,6 +39,10 @@ const showOnboarding = computed(() =>
             v-show="ui.view === 'changes'"
             class="h-full"
           />
+          <ExplorerFileExplorerView
+            v-show="ui.view === 'explorer'"
+            class="h-full"
+          />
           <OnboardingOverlay v-if="showOnboarding" />
           <GithubCiLogsModal />
         </main>

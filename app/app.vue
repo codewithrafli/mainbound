@@ -40,6 +40,9 @@ function dispatchAction(action: string) {
     case 'view-changes':
       ui.view = 'changes'
       break
+    case 'view-explorer':
+      ui.view = 'explorer'
+      break
     case 'check-updates':
       updater.check(true)
       break
@@ -86,6 +89,7 @@ function onKeydown(e: KeyboardEvent) {
     'w': 'close-session',
     '1': 'view-terminal',
     '2': 'view-changes',
+    '3': 'view-explorer',
     'k': 'command-palette',
     'f': 'find',
     '=': 'zoom-in',

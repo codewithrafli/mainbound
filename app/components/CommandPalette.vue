@@ -58,6 +58,14 @@ const groups = computed(() => [
           ui.view = 'changes'
         })
       },
+      {
+        label: 'Explorer view',
+        icon: 'i-lucide-folder-tree',
+        kbds: ['meta', '3'],
+        onSelect: run(() => {
+          ui.view = 'explorer'
+        })
+      },
       ...(activeRepo.value
         ? [
             {
