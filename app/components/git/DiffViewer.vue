@@ -25,6 +25,13 @@ const data = computed(() => {
     hunks: [git.diff]
   }
 })
+
+const emptyDiffMessage = computed(() => {
+  if (git.selected?.file.status === 'U' && git.selected.file.path.endsWith('/')) {
+    return 'No textual diff in this folder. It may be empty or contain only binary files.'
+  }
+  return 'No textual diff (binary file or empty change).'
+})
 </script>
 
 <template>
@@ -85,7 +92,7 @@ const data = computed(() => {
         v-else
         class="flex items-center justify-center py-16 text-sm text-dimmed"
       >
-        No textual diff (binary file or empty change).
+        {{ emptyDiffMessage }}
       </div>
     </template>
 

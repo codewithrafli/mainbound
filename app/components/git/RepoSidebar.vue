@@ -8,7 +8,6 @@ const changesOpen = ref(true)
 const conflictCount = computed(() => git.status?.conflicts.length ?? 0)
 </script>
 
-
 <template>
   <aside class="flex flex-col w-64 shrink-0 border-r border-default bg-muted/40 overflow-y-auto">
     <!-- Repositories -->

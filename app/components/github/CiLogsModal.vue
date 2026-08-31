@@ -2,7 +2,7 @@
 const github = useGithubStore()
 const termEl = ref<HTMLPreElement>()
 
-watch(github.ciLogsContent, () => {
+watch(() => github.ciLogsContent, () => {
   nextTick(() => {
     if (termEl.value) termEl.value.scrollTop = termEl.value.scrollHeight
   })
@@ -30,7 +30,7 @@ watch(github.ciLogsContent, () => {
               'border-green-500/30 text-green-400': job.conclusion === 'success',
               'border-red-500/30 text-red-400': job.conclusion === 'failure',
               'border-amber-500/30 text-amber-400': job.status === 'in_progress',
-              'border-(--ui-border) text-dimmed': !job.conclusion && job.status !== 'in_progress',
+              'border-(--ui-border) text-dimmed': !job.conclusion && job.status !== 'in_progress'
             }"
           >
             <span
@@ -39,7 +39,7 @@ watch(github.ciLogsContent, () => {
                 'bg-green-500': job.conclusion === 'success',
                 'bg-red-500': job.conclusion === 'failure',
                 'bg-amber-400 animate-pulse': job.status === 'in_progress',
-                'bg-dimmed': !job.conclusion && job.status !== 'in_progress',
+                'bg-dimmed': !job.conclusion && job.status !== 'in_progress'
               }"
             />
             {{ job.name }}

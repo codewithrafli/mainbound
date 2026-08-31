@@ -342,7 +342,9 @@ export const useGitStore = defineStore('git', () => {
       await onPush()
 
       shipStep.value = 'done'
-      setTimeout(() => { shipStep.value = null }, 2000)
+      setTimeout(() => {
+        shipStep.value = null
+      }, 2000)
       return true
     } catch (e) {
       shipError.value = String(e)
@@ -359,7 +361,7 @@ export const useGitStore = defineStore('git', () => {
     stashList.value.filter(s => s.message.startsWith('checkpoint:'))
   )
 
-  async function checkpointSave(repo: string, name: string) {
+  async function checkpointSave(repo: string, name?: string) {
     const msg = `checkpoint: ${name || new Date().toLocaleTimeString()}`
     return stashPush(repo, msg)
   }
@@ -379,8 +381,8 @@ export const useGitStore = defineStore('git', () => {
   /** Returns unstaged files grouped by their top-level directory. */
   const unstagedByFolder = computed(() => {
     const s = status.value
-    if (!s) return {} as Record<string, typeof s.unstaged>
-    const groups: Record<string, typeof s.unstaged> = {}
+    if (!s) return {} as Record<string, FileChange[]>
+    const groups: Record<string, FileChange[]> = {}
     for (const file of s.unstaged) {
       const folder = file.path.includes('/')
         ? file.path.split('/')[0]!
@@ -394,7 +396,7 @@ export const useGitStore = defineStore('git', () => {
   async function stageFolder(repo: string, folder: string) {
     const files = unstagedByFolder.value[folder]
     if (!files?.length) return
-    await stage(repo, files.map(f => f.path))
+    await stage(repo, files.map((file: FileChange) => file.path))
   }
 
   const filteredUnstaged = computed(() => {

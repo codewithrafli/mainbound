@@ -99,7 +99,7 @@ let mediaRecorder: MediaRecorder | undefined
 let mediaStream: MediaStream | undefined
 let audioContext: AudioContext | undefined
 let analyser: AnalyserNode | undefined
-let frequencyData: Uint8Array | undefined
+let frequencyData: Uint8Array<ArrayBuffer> | undefined
 let silenceFrame = 0
 let speechStartedAt: number | null = null
 let lastSpeechAt: number | null = null
@@ -157,7 +157,7 @@ onMounted(async () => {
   // SF Mono/Menlo on macOS, Noto on Linux
   const fontFamily = 'ui-monospace, "Cascadia Code", Consolas, "SF Mono", Menlo, "DejaVu Sans Mono", monospace'
 
-  term = new Terminal({
+  const terminalOptions = {
     allowProposedApi: true,
     cursorBlink: true,
     scrollback: 10_000,
@@ -171,7 +171,8 @@ onMounted(async () => {
       cursor: '#cccccc',
       cursorAccent: '#0e0e10'
     }
-  })
+  } as ConstructorParameters<typeof Terminal>[0] & { fastScrollModifier: 'alt' }
+  term = new Terminal(terminalOptions)
   fit = new FitAddon()
   term.loadAddon(fit)
   term.loadAddon(new Unicode11Addon())
@@ -565,7 +566,7 @@ function stopGroqRecording(manual = false) {
   manualGroqStop = false
 }
 
-function updateGroqSpectrum(data: Uint8Array) {
+function updateGroqSpectrum(data: Uint8Array<ArrayBuffer>) {
   const samplesPerBar = Math.max(1, Math.floor(data.length / GROQ_SPECTRUM_BARS))
   const levels = Array.from({ length: GROQ_SPECTRUM_BARS }, (_, bar) => {
     let sum = 0

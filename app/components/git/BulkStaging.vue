@@ -17,9 +17,15 @@ async function stageFolder(folder: string) {
 </script>
 
 <template>
-  <div v-if="show" class="panel-card overflow-hidden">
+  <div
+    v-if="show"
+    class="panel-card overflow-hidden"
+  >
     <div class="flex items-center gap-1.5 px-3 py-2 section-label border-b border-(--ui-border-muted)">
-      <UIcon name="i-lucide-folders" class="size-3" />
+      <UIcon
+        name="i-lucide-folders"
+        class="size-3"
+      />
       Stage by Folder
     </div>
     <div class="px-1.5 py-1 space-y-0.5">
@@ -28,7 +34,10 @@ async function stageFolder(folder: string) {
         :key="folder"
         class="group flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-elevated/50 transition-colors"
       >
-        <UIcon name="i-lucide-folder" class="size-3.5 text-blue-400 shrink-0" />
+        <UIcon
+          name="i-lucide-folder"
+          class="size-3.5 text-blue-400 shrink-0"
+        />
         <span class="flex-1 text-[12px] text-toned font-mono truncate">
           {{ folder === '.' ? 'root' : folder }}/
         </span>

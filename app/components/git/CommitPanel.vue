@@ -7,8 +7,6 @@ const github = useGithubStore()
 const toast = useToast()
 const { settings } = storeToRefs(useSettingsStore())
 
-const advancedOpen = ref(false)
-
 async function doPush() {
   if (!git.selectedRepo) return
   if (await github.push(git.selectedRepo)) git.refresh(git.selectedRepo)
@@ -142,23 +140,60 @@ watch(() => git.selectedRepo, (repo) => {
         <!-- branch card -->
         <div class="panel-card px-3 py-2.5">
           <div class="flex items-center gap-2">
-            <UIcon name="i-lucide-git-branch" class="size-3.5 text-muted" />
+            <UIcon
+              name="i-lucide-git-branch"
+              class="size-3.5 text-muted"
+            />
             <span class="text-[13px] font-medium text-highlighted truncate">{{ git.status.branch ?? 'detached' }}</span>
-            <span v-if="git.status.oid" class="text-[10px] font-mono text-dimmed">{{ git.status.oid }}</span>
+            <span
+              v-if="git.status.oid"
+              class="text-[10px] font-mono text-dimmed"
+            >{{ git.status.oid }}</span>
           </div>
           <div class="flex items-center gap-2 pt-1.5 text-[10.5px] font-mono">
-            <span v-if="git.status.ahead" class="text-green-500" title="Commits ahead of upstream">↑{{ git.status.ahead
-              }}</span>
-            <span v-if="git.status.behind" class="text-amber-400" title="Commits behind upstream">↓{{ git.status.behind
-              }}</span>
-            <span v-if="!git.status.ahead && !git.status.behind" class="text-dimmed">synced with upstream</span>
+            <span
+              v-if="git.status.ahead"
+              class="text-green-500"
+              title="Commits ahead of upstream"
+            >↑{{ git.status.ahead
+            }}</span>
+            <span
+              v-if="git.status.behind"
+              class="text-amber-400"
+              title="Commits behind upstream"
+            >↓{{ git.status.behind
+            }}</span>
+            <span
+              v-if="!git.status.ahead && !git.status.behind"
+              class="text-dimmed"
+            >synced with upstream</span>
             <span class="ml-auto flex items-center">
-              <UButton icon="i-lucide-arrow-down-to-line" color="neutral" variant="ghost" size="xs" aria-label="Pull"
-                :loading="github.syncing === 'pull'" @click="doPull" />
-              <UButton icon="i-lucide-arrow-up-from-line" color="neutral" variant="ghost" size="xs" aria-label="Push"
-                :loading="github.syncing === 'push'" @click="doPush" />
-              <UButton icon="i-lucide-refresh-cw" color="neutral" variant="ghost" size="xs" aria-label="Refresh"
-                @click="git.refresh(git.selectedRepo!)" />
+              <UButton
+                icon="i-lucide-arrow-down-to-line"
+                color="neutral"
+                variant="ghost"
+                size="xs"
+                aria-label="Pull"
+                :loading="github.syncing === 'pull'"
+                @click="doPull"
+              />
+              <UButton
+                icon="i-lucide-arrow-up-from-line"
+                color="neutral"
+                variant="ghost"
+                size="xs"
+                aria-label="Push"
+                :loading="github.syncing === 'push'"
+                @click="doPush"
+              />
+              <UButton
+                icon="i-lucide-refresh-cw"
+                color="neutral"
+                variant="ghost"
+                size="xs"
+                aria-label="Refresh"
+                @click="git.refresh(git.selectedRepo!)"
+              />
             </span>
           </div>
         </div>
@@ -166,17 +201,35 @@ watch(() => git.selectedRepo, (repo) => {
         <!-- staged card -->
         <div class="panel-card overflow-hidden">
           <div class="flex items-center gap-1.5 px-3 py-2 section-label border-b border-(--ui-border-muted)">
-            <UIcon name="i-lucide-layers" class="size-3" />
+            <UIcon
+              name="i-lucide-layers"
+              class="size-3"
+            />
             Staged
             <span class="font-mono text-dimmed">{{ git.status.staged.length }}</span>
-            <UButton label="Stage all" color="neutral" variant="link" size="xs" class="ml-auto"
-              :disabled="!git.status.unstaged.length" @click="git.stageAll(git.selectedRepo!)" />
+            <UButton
+              label="Stage all"
+              color="neutral"
+              variant="link"
+              size="xs"
+              class="ml-auto"
+              :disabled="!git.status.unstaged.length"
+              @click="git.stageAll(git.selectedRepo!)"
+            />
           </div>
           <div class="px-1.5 py-1 space-y-0.5">
-            <GitChangeRow v-for="file in git.status.staged" :key="`s-${file.path}`" :file="file"
+            <GitChangeRow
+              v-for="file in git.status.staged"
+              :key="`s-${file.path}`"
+              :file="file"
               :active="git.selected?.file.path === file.path && git.selected?.file.staged"
-              @select="git.selectFile(git.selectedRepo!, file)" @action="git.unstage(git.selectedRepo!, [file.path])" />
-            <p v-if="!git.status.staged.length" class="px-2 py-2 text-[11px] text-dimmed italic">
+              @select="git.selectFile(git.selectedRepo!, file)"
+              @action="git.unstage(git.selectedRepo!, [file.path])"
+            />
+            <p
+              v-if="!git.status.staged.length"
+              class="px-2 py-2 text-[11px] text-dimmed italic"
+            >
               Nothing staged yet.
             </p>
           </div>
@@ -185,54 +238,121 @@ watch(() => git.selectedRepo, (repo) => {
         <!-- commit card -->
         <div class="panel-card overflow-hidden">
           <div class="flex items-center gap-1.5 px-3 py-2 section-label border-b border-(--ui-border-muted)">
-            <UIcon name="i-lucide-git-commit-horizontal" class="size-3" />
+            <UIcon
+              name="i-lucide-git-commit-horizontal"
+              class="size-3"
+            />
             Commit
             <span class="font-mono text-dimmed">{{ git.status.staged.length }}</span>
-            <span v-if="amend"
-              class="ml-auto flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">
-              <UIcon name="i-lucide-pencil" class="size-2.5" />
+            <span
+              v-if="amend"
+              class="ml-auto flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400"
+            >
+              <UIcon
+                name="i-lucide-pencil"
+                class="size-2.5"
+              />
               Amending
             </span>
           </div>
           <div class="p-2.5 space-y-2">
-            <UAlert v-if="amend" color="warning" variant="soft" icon="i-lucide-triangle-alert"
-              description="This rewrites the last commit. Don't amend pushed commits." class="text-xs" />
-            <UInput v-model="summary" placeholder="Summary (required)" size="sm" class="w-full"
-              @keydown.meta.enter="doCommit" />
-            <UTextarea v-model="description" placeholder="Description (optional)" :rows="3" size="sm" class="w-full"
-              @keydown.meta.enter="doCommit" />
+            <UAlert
+              v-if="amend"
+              color="warning"
+              variant="soft"
+              icon="i-lucide-triangle-alert"
+              description="This rewrites the last commit. Don't amend pushed commits."
+              class="text-xs"
+            />
+            <UInput
+              v-model="summary"
+              placeholder="Summary (required)"
+              size="sm"
+              class="w-full"
+              @keydown.meta.enter="doCommit"
+            />
+            <UTextarea
+              v-model="description"
+              placeholder="Description (optional)"
+              :rows="3"
+              size="sm"
+              class="w-full"
+              @keydown.meta.enter="doCommit"
+            />
             <div class="flex items-center justify-between">
-              <UButton :label="generating ? 'Generating…' : 'Generate with AI'" icon="i-lucide-sparkles" color="neutral"
-                variant="link" size="xs" :loading="generating" :disabled="!git.status.staged.length || generating"
-                @click="generateWithAi" />
+              <UButton
+                :label="generating ? 'Generating…' : 'Generate with AI'"
+                icon="i-lucide-sparkles"
+                color="neutral"
+                variant="link"
+                size="xs"
+                :loading="generating"
+                :disabled="!git.status.staged.length || generating"
+                @click="generateWithAi"
+              />
               <span class="text-[10px] text-dimmed">{{ settings.aiProvider === 'codex' ? 'Codex' : 'Claude' }} ·
                 ⌘↵</span>
             </div>
-            <UAlert v-if="aiError" color="error" variant="soft" :description="aiError" class="text-xs" />
+            <UAlert
+              v-if="aiError"
+              color="error"
+              variant="soft"
+              :description="aiError"
+              class="text-xs"
+            />
             <!-- split button: Commit (primary) + dropdown of extra flows -->
             <div class="flex gap-1">
-              <UButton :label="git.shipStep ? 'Shipping…' : (amend ? 'Amend Commit' : 'Commit')" color="primary"
-                variant="solid" size="sm" block class="flex-1"
+              <UButton
+                :label="git.shipStep ? 'Shipping…' : (amend ? 'Amend Commit' : 'Commit')"
+                color="primary"
+                variant="solid"
+                size="sm"
+                block
+                class="flex-1"
                 :loading="git.committing || (!!git.shipStep && git.shipStep !== 'done')"
-                :disabled="!canCommit && !git.shipStep" @click="doCommit" />
-              <UDropdownMenu :items="commitMenu" :content="{ align: 'end' }" :ui="{ content: 'w-48' }">
-                <UButton icon="i-lucide-chevron-down" color="primary" variant="solid" size="sm"
-                  aria-label="More commit actions" />
+                :disabled="!canCommit && !git.shipStep"
+                @click="doCommit"
+              />
+              <UDropdownMenu
+                :items="commitMenu"
+                :content="{ align: 'end' }"
+                :ui="{ content: 'w-48' }"
+              >
+                <UButton
+                  icon="i-lucide-chevron-down"
+                  color="primary"
+                  variant="solid"
+                  size="sm"
+                  aria-label="More commit actions"
+                />
               </UDropdownMenu>
             </div>
-            <UAlert v-if="git.error" color="error" variant="soft" :description="git.error" class="text-xs" />
+            <UAlert
+              v-if="git.error"
+              color="error"
+              variant="soft"
+              :description="git.error"
+              class="text-xs"
+            />
           </div>
         </div>
 
         <!-- history card -->
         <div class="panel-card overflow-hidden">
           <div class="flex items-center gap-1.5 px-3 py-2 section-label border-b border-(--ui-border-muted)">
-            <UIcon name="i-lucide-history" class="size-3" />
+            <UIcon
+              name="i-lucide-history"
+              class="size-3"
+            />
             History
             <span class="font-mono text-dimmed">{{ git.log.length }}</span>
           </div>
           <div class="px-3 py-2.5 space-y-2.5">
-            <div v-for="commit in git.log" :key="commit.hash" class="group flex gap-2">
+            <div
+              v-for="commit in git.log"
+              :key="commit.hash"
+              class="group flex gap-2"
+            >
               <span class="mt-1 size-1.5 shrink-0 rounded-full bg-blue-500" />
               <div class="flex-1 min-w-0">
                 <p class="text-[12px] text-toned truncate leading-tight">
@@ -242,12 +362,24 @@ watch(() => git.selectedRepo, (repo) => {
                   {{ commit.short_hash }} · {{ commit.author }} · {{ useRelativeDate(commit.date) }}
                 </p>
               </div>
-              <UTooltip text="Cherry-pick" :content="{ side: 'left' }">
-                <UButton icon="i-lucide-cherry" size="xs" color="neutral" variant="ghost"
-                  class="opacity-0 group-hover:opacity-100 shrink-0 -mt-0.5" @click="doCherryPick(commit.hash)" />
+              <UTooltip
+                text="Cherry-pick"
+                :content="{ side: 'left' }"
+              >
+                <UButton
+                  icon="i-lucide-cherry"
+                  size="xs"
+                  color="neutral"
+                  variant="ghost"
+                  class="opacity-0 group-hover:opacity-100 shrink-0 -mt-0.5"
+                  @click="doCherryPick(commit.hash)"
+                />
               </UTooltip>
             </div>
-            <p v-if="!git.log.length" class="text-[11px] text-dimmed italic">
+            <p
+              v-if="!git.log.length"
+              class="text-[11px] text-dimmed italic"
+            >
               No commits yet.
             </p>
           </div>
@@ -261,7 +393,10 @@ watch(() => git.selectedRepo, (repo) => {
       </div>
     </template>
 
-    <div v-else class="flex flex-1 items-center justify-center p-6">
+    <div
+      v-else
+      class="flex flex-1 items-center justify-center p-6"
+    >
       <p class="text-xs text-dimmed text-center">
         Select a repository to stage and commit changes.
       </p>

@@ -169,7 +169,10 @@ const ciSummary = computed(() => {
                 autofocus
                 @keydown.enter="newBranchName.trim() && checkout(newBranchName.trim(), true)"
               />
-              <UTooltip text="Generate with AI" :content="{ side: 'top' }">
+              <UTooltip
+                text="Generate with AI"
+                :content="{ side: 'top' }"
+              >
                 <UButton
                   icon="i-lucide-sparkles"
                   size="sm"

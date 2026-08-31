@@ -7,6 +7,8 @@ use serde::Serialize;
 
 use crate::error::{AppError, AppResult};
 
+const MAX_UNTRACKED_DIR_DIFF_BYTES: usize = 1_500_000;
+
 // ---------------------------------------------------------------------------
 // Cheap branch lookup (no subprocess) for sidebars
 // ---------------------------------------------------------------------------
@@ -185,17 +187,39 @@ fn numstat(repo: &str, staged: bool) -> HashMap<String, (Option<u32>, Option<u32
     map
 }
 
-fn count_lines(repo: &str, rel_path: &str) -> Option<u32> {
-    let full = Path::new(repo).join(rel_path);
-    let meta = fs::metadata(&full).ok()?;
+fn count_file_lines(path: &Path) -> Option<u32> {
+    let meta = fs::metadata(path).ok()?;
     if meta.len() > 5_000_000 {
         return None; // don't read huge files just for a badge
     }
-    let content = fs::read(&full).ok()?;
+    let content = fs::read(path).ok()?;
     if content.contains(&0) {
         return None; // binary
     }
     Some(content.iter().filter(|&&b| b == b'\n').count() as u32)
+}
+
+fn count_path_lines(path: &Path) -> Option<u32> {
+    let meta = fs::metadata(path).ok()?;
+    if meta.is_file() {
+        return count_file_lines(path);
+    }
+    if !meta.is_dir() {
+        return None;
+    }
+
+    let mut total = 0u32;
+    for entry in fs::read_dir(path).ok()? {
+        let entry = entry.ok()?;
+        if let Some(lines) = count_path_lines(&entry.path()) {
+            total = total.saturating_add(lines);
+        }
+    }
+    Some(total)
+}
+
+fn count_lines(repo: &str, rel_path: &str) -> Option<u32> {
+    count_path_lines(&Path::new(repo).join(rel_path))
 }
 
 #[tauri::command]
@@ -309,9 +333,67 @@ pub fn git_status(repo: String) -> AppResult<GitStatus> {
 // Diff / stage / commit / log
 // ---------------------------------------------------------------------------
 
+fn collect_files(path: &Path, files: &mut Vec<PathBuf>) -> AppResult<()> {
+    let mut entries = fs::read_dir(path)
+        .map_err(|e| AppError::Pty(format!("read dir {}: {e}", path.display())))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| AppError::Pty(format!("read dir {}: {e}", path.display())))?;
+    entries.sort_by_key(|entry| entry.path());
+
+    for entry in entries {
+        let path = entry.path();
+        let meta = entry
+            .metadata()
+            .map_err(|e| AppError::Pty(format!("metadata {}: {e}", path.display())))?;
+        if meta.is_dir() {
+            collect_files(&path, files)?;
+        } else if meta.is_file() {
+            files.push(path);
+        }
+    }
+    Ok(())
+}
+
+fn untracked_directory_diff(repo: &str, rel_path: &str) -> AppResult<String> {
+    let repo_path = Path::new(repo);
+    let folder = repo_path.join(rel_path);
+    let mut files = Vec::new();
+    collect_files(&folder, &mut files)?;
+
+    let mut diff = String::new();
+    for file in files {
+        let rel = file
+            .strip_prefix(repo_path)
+            .unwrap_or(&file)
+            .to_string_lossy()
+            .into_owned();
+        let chunk = run_git_str(repo, &["diff", "--no-index", "--", "/dev/null", &rel], &[1])?;
+        if chunk.trim().is_empty() {
+            continue;
+        }
+        diff.push_str(&chunk);
+        if !diff.ends_with('\n') {
+            diff.push('\n');
+        }
+        if diff.len() > MAX_UNTRACKED_DIR_DIFF_BYTES {
+            let mut cut = MAX_UNTRACKED_DIR_DIFF_BYTES;
+            while !diff.is_char_boundary(cut) {
+                cut -= 1;
+            }
+            diff.truncate(cut);
+            diff.push_str("\n[... folder diff truncated ...]\n");
+            break;
+        }
+    }
+    Ok(diff)
+}
+
 #[tauri::command]
 pub fn git_diff(repo: String, path: String, staged: bool, untracked: bool) -> AppResult<String> {
     if untracked {
+        if Path::new(&repo).join(&path).is_dir() {
+            return untracked_directory_diff(&repo, &path);
+        }
         // No index entry yet: diff against /dev/null to show the whole file
         return run_git_str(
             &repo,
@@ -338,7 +420,7 @@ pub fn git_discard(repo: String, tracked: Vec<String>, untracked: Vec<String>) -
         run_git(&repo, &args, &[])?;
     }
     if !untracked.is_empty() {
-        let mut args = vec!["clean", "-f", "--"];
+        let mut args = vec!["clean", "-fd", "--"];
         args.extend(untracked.iter().map(String::as_str));
         run_git(&repo, &args, &[])?;
     }
